@@ -6,6 +6,33 @@ use \Tsugi\UI\Output;
 
 class BlobUtil {
 
+    /**
+     * Check to see if the $_POST is completely broken in file upload
+     * Sometimes, if the maxUpload_SIZE is exceeded, it deletes all of $_POST
+     * and we lose our session.
+     */
+    public static function emptyPostSessionLost()
+    {
+        return ( self::emptyPost() && !isset($_GET[session_name()]) ) ;
+    }
+
+    /**
+     * Check to see if the $_POST is completely broken in file upload
+     * Sometimes, if the maxUpload_SIZE is exceeded, it deletes all of $_POST
+     */
+    public static function emptyPost()
+    {
+        return ( $_SERVER['REQUEST_METHOD'] == 'POST' && count($_POST) == 0 );
+    }
+
+    /**
+     *
+     */
+    public static function uploadTooLarge($filename)
+    {
+        return isset($_FILES[$filename]) && $_FILES[$filename]['error'] == 1 ;
+    }
+
     public static function getFolderName()
     {
         global $CFG, $CONTEXT;
@@ -40,30 +67,41 @@ class BlobUtil {
         return  true;
     }
 
-    public static function checkFileSafety($FILE_DESCRIPTOR, $CONTENT_TYPES=array("image/png", "image/jpeg") )
+    /**
+     * Returns true if this is a good upload, an error string if not
+     */
+    public static function validateUpload($FILE_DESCRIPTOR, $SAFETY_CHECK=true)
     {
         $retval = true;
         $filename = isset($FILE_DESCRIPTOR['name']) ? basename($FILE_DESCRIPTOR['name']) : false;
 
         if ( $FILE_DESCRIPTOR['error'] == 1) {
-            $retval = "General upload failure";
+            $retval = _m("General upload failure");
         } else if ( $FILE_DESCRIPTOR['error'] == 4) {
-            $retval = 'Missing file, make sure to select file(s) before pressing submit';
+            $retval = _m('Missing file, make sure to select file(s) before pressing submit');
         } else if ( $filename === false ) {
-            $retval = "Uploaded file has no name";
+            $retval = _m("Uploaded file has no name");
         } else if ( $FILE_DESCRIPTOR['size'] < 1 ) {
-            $retval = "File is empty: ".$filename;
+            $retval = _m("File is empty: ").$filename;
         } else if ( $FILE_DESCRIPTOR['error'] == 0 ) {
-            if ( preg_match(self::BAD_FILE_SUFFIXES, $filename) ) $retval = "File suffix not allowed";
-
-            $contenttype = $FILE_DESCRIPTOR['type'];
-            if ( ! in_array($contenttype, $CONTENT_TYPES) ) $retval = "Content type ".$contenttype." not allowed";
+            if ( $SAFETY_CHECK && preg_match(self::BAD_FILE_SUFFIXES, $filename) ) $retval = _m("File suffix not allowed");
         } else {
-            $retval = "Upload failure=".$FILE_DESCRIPTOR['error'];
+            $retval = _m("Upload failure=").$FILE_DESCRIPTOR['error'];
         }
-        if ( $retval !== true ) {
-            error_log($retval." file=".$filename);
-        }
+        return $retval;
+    }
+
+    public static function checkFileSafety($FILE_DESCRIPTOR, $CONTENT_TYPES=array("image/png", "image/jpeg") )
+    {
+        $retval = true;
+        $filename = isset($FILE_DESCRIPTOR['name']) ? basename($FILE_DESCRIPTOR['name']) : false;
+
+        $retval = self::validateUpload($FILE_DESCRIPTOR, true);
+        if ( is_string($retval) ) return $retval;
+
+        $contenttype = $FILE_DESCRIPTOR['type'];
+        if ( ! in_array($contenttype, $CONTENT_TYPES) ) $retval = "Content type ".$contenttype." not allowed";
+
         return $retval;
     }
 
@@ -81,72 +119,184 @@ class BlobUtil {
         return $image_type == IMAGETYPE_JPEG || $image_type == IMAGETYPE_PNG;
     }
 
+    public static function getBlobFolder($sha_256, $blob_root=false /* Unit Test*/)
+    {
+        global $CFG;
+        if ( ! $blob_root ) {
+            if ( ! isset($CFG->dataroot) ) return false;
+            $blob_root = $CFG->dataroot;
+        }
+
+        $top_dir = substr($sha_256,0,2);
+        $sub_dir = substr($sha_256,2,2);
+        $top_dir = str_pad($top_dir.'',2,'0',STR_PAD_LEFT);
+        $sub_dir = str_pad($sub_dir.'',2,'0',STR_PAD_LEFT);
+
+        $blob_folder = $blob_root . '/' . $top_dir . '/' . $sub_dir ;
+        return $blob_folder;
+    }
+
+    public static function mkdirSha256($sha_256, $blob_root=false /* Unit Test*/)
+    {
+        global $CFG;
+        if ( ! $blob_root ) {
+            if ( ! isset($CFG->dataroot) ) return false;
+            $blob_root = $CFG->dataroot;
+        }
+
+        if ( ! is_writeable($blob_root) ) {
+            error_log('Dataroot is not writeable '.$blob_root);
+            return false;
+        }
+
+        $blob_folder = self::getBlobFolder($sha_256, $blob_root);
+
+        // error_log("BF=$blob_folder\n");
+        if ( file_exists($blob_folder) && is_writeable($blob_folder) ) {
+            return $blob_folder;
+        }
+        if ( mkdir($blob_folder,0770,true) ) {
+            return $blob_folder;
+        }
+        error_log('blob folder failure '.$blob_folder);
+        return false;
+    }
+
+    /**
+     * uploadToBlob - returns blob_id or false
+     *
+     * Returns false for any number of failures, for better detail, use
+     * validateUpload() before calling this to do the actual upload.
+     */
+    public static function uploadToBlob($FILE_DESCRIPTOR, $SAFETY_CHECK=true)
+    {
+        $retval = self::uploadFileToBlob($FILE_DESCRIPTOR, $SAFETY_CHECK);
+        if ( is_array($retval) ) $retval = $retval[0];
+        return $retval;
+    }
+
+    /**
+     * isTestKey - Indicate if this is a key that is supposed to stay in blob_file
+     */
+    public static function isTestKey($key)
+    {
+        global $CFG;
+        $testlist = array('12345');
+        if ( isset($CFG->testblobs) ) {
+            if ( is_string($CFG->testblobs) ) {
+                $testlist = array($CFG->testblobs);
+            } else if ( is_array($CFG->testblobs) ) {
+                $testlist = $CFG->testblobs;
+            } else {
+                $testlist = array('12345');
+            }
+        }
+        return in_array($key, $testlist);
+    }
+
+    /**
+     * Legacy code - returns array [id, sha256]
+     *
+     * Returns false for any number of failures, for better detail, use
+     * validateUpload() before calling this to do the actual upload.
+     */
     public static function uploadFileToBlob($FILE_DESCRIPTOR, $SAFETY_CHECK=true)
     {
-        global $CFG, $CONTEXT, $PDOX;
+        global $CFG, $CONTEXT, $LINK, $PDOX;
 
-        if ( $SAFETY_CHECK && self::checkFileSafety($FILE_DESCRIPTOR) !== true ) return false;
+        $test_key = self::isTestKey($CONTEXT->key);
 
         if( $FILE_DESCRIPTOR['error'] == 1) return false;
 
         if( $FILE_DESCRIPTOR['error'] == 0)
         {
             $filename = basename($FILE_DESCRIPTOR['name']);
-            if ( endsWith($filename, '.php') ) {
+            if ( $SAFETY_CHECK && ! self::safeFileSuffix($filename) ) {
                 return false;
             }
 
-            // $data = file_get_contents($FILE_DESCRIPTOR['tmp_name']);
-            // $sha256 = lti_sha256($data);
-
+            $blob_id = null;
+            $blob_name = null;
             $sha256 = hash_file('sha256', $FILE_DESCRIPTOR['tmp_name']);
+
+            // Check if the blob is in the single instance store
             $stmt = $PDOX->queryDie(
-                "SELECT file_id, file_sha256 from {$CFG->dbprefix}blob_file
-                WHERE context_id = :CID AND file_sha256 = :SHA",
-                array(":CID" => $CONTEXT->id, ":SHA" => $sha256)
+                "SELECT blob_id FROM {$CFG->dbprefix}blob_blob WHERE blob_sha256 = :SHA",
+                array(":SHA" => $sha256)
             );
-            $row = $stmt->fetch(\PDO::FETCH_NUM);
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
             if ( $row !== false ) {
                 error_log("Already had instance of $filename");
-                $row[0] = $row[0]+0;  // Make sure the id is an integer
-                return $row;
+                $blob_id = $row['blob_id']+0;  // Make sure the id is an integer
             }
 
-            $fp = fopen($FILE_DESCRIPTOR['tmp_name'], "rb");
-            $stmt = $PDOX->prepare("INSERT INTO {$CFG->dbprefix}blob_file
-                (context_id, file_sha256, file_name, contenttype, content, created_at)
-                VALUES (?, ?, ?, ?, ?, NOW())");
+            // Don't store test_key (i.e. 12345) as new blobs on disk
+            if (! $test_key && ! $blob_id && isset($CFG->dataroot) && $CFG->dataroot ) {
+                $blob_folder = BlobUtil::mkdirSha256($sha256);
+                if ( $blob_folder ) {
+                    $blob_name =  $blob_folder . '/' . $sha256;
+                    if ( file_exists( $blob_name ) ) {
+                        error_log("Already had file on disk $filename => $blob_name");
+                    } else { // Put the file into the blob space if we can
+                        if ( ! (move_uploaded_file($FILE_DESCRIPTOR['tmp_name'],$blob_name))) {
+                            error_log("Move fail $filename to $blob_name ");
+                            $blob_name = null;
+                        }
+                    }
+                }
+            }
 
-            $stmt->bindParam(1, $CONTEXT->id);
-            $stmt->bindParam(2, $sha256);
-            $stmt->bindParam(3, $filename);
-            $stmt->bindParam(4, $FILE_DESCRIPTOR['type']);
-            $stmt->bindParam(5, $fp, \PDO::PARAM_LOB);
-            // $stmt->bindParam(5, $data, \PDO::PARAM_LOB);
-            $PDOX->beginTransaction();
-            $stmt->execute();
-            $id = 0+$PDOX->lastInsertId();
-            $PDOX->commit();
-            fclose($fp);
-            return array($id, $sha256);
+            // If not on disk store in the single instance table
+            if (! $blob_id && ! $blob_name ) {
+                $fp = fopen($FILE_DESCRIPTOR['tmp_name'], "rb");
+                $stmt = $PDOX->prepare("INSERT INTO {$CFG->dbprefix}blob_blob
+                    (blob_sha256, content, created_at)
+                    VALUES (?, ?, NOW())");
+
+                $stmt->bindParam(1, $sha256);
+                $stmt->bindParam(2, $fp, \PDO::PARAM_LOB);
+                // $stmt->bindParam(5, $data, \PDO::PARAM_LOB);
+                $PDOX->beginTransaction();
+                $stmt->execute();
+                $blob_id = 0+$PDOX->lastInsertId();
+                $PDOX->commit();
+                fclose($fp);
+            }
+
+            // Blob is safe somewhere, insert the file record with pointers
+            if ( $blob_id || $blob_name ) {
+                $stmt = $PDOX->prepare("INSERT INTO {$CFG->dbprefix}blob_file
+                    (context_id, link_id, file_sha256, file_name, contenttype, path, blob_id, created_at)
+                    VALUES (:CID, :LID, :SHA, :NAME, :TYPE, :PATH, :BID, NOW())");
+                $stmt->execute(array(
+                    ":CID" => $CONTEXT->id,
+                    ":LID" => $LINK->id,
+                    ":SHA" => $sha256,
+                    ":NAME" => $filename,
+                    ":TYPE" => $FILE_DESCRIPTOR['type'],
+                    ":PATH" => $blob_name,
+                    ":BID" => $blob_id
+                ));
+                $id = 0+$PDOX->lastInsertId();
+                return array($id, $sha256);
+            }
+
+            // Somehow we were unable to store the blob
+            error_log("Error: Unable to store blob $filename ".$CONTEXT->id."\n");
+            return false;
         }
         return false;
     }
 
-    public static function uploadFileToString($FILE_DESCRIPTOR, $SAFETY_CHECK=true)
+    public static function uploadFileToString($FILE_DESCRIPTOR)
     {
         global $CFG, $CONTEXT, $PDOX;
-
-        if ( $SAFETY_CHECK && self::checkFileSafety($FILE_DESCRIPTOR) !== true ) return false;
 
         if( $FILE_DESCRIPTOR['error'] == 1) return false;
 
         if( $FILE_DESCRIPTOR['error'] == 0)
         {
             $filename = basename($FILE_DESCRIPTOR['name']);
-            if ( strpos($filename, '.php') !== false ) {
-                return false;
-            }
 
             $data = file_get_contents($FILE_DESCRIPTOR['tmp_name']);
             return $data;
@@ -179,4 +329,183 @@ class BlobUtil {
         return $upload_mb;
     }
 
+    /** Check and migrate a blob from an old place to the right new place
+     *
+     * @return mixed true if the file was migrated, false if the file
+     *      was not migrated, and a string if an error was enountered
+     */
+    public static function migrate($file_id, $test_key=false)
+    {
+        global $CFG, $PDOX;
+
+        $retval = false;
+
+        // Check to see where we are moving to...
+        if ( isset($CFG->dataroot) && strlen($CFG->dataroot) > 0 ) {
+            if ( ! $test_key ) {
+                $retval = self::blob2file($file_id);
+            }
+        } else {
+            $retval = self::blob2blob($file_id);
+        }
+        return $retval;
+    }
+
+    /** Check and migrate a blob from blob_file to blob_blob
+     *
+     * @return mixed true if the file was migrated, false if the file
+     *      was not migrated, and a string if an error was enountered
+     */
+    public static function blob2blob($file_id)
+    {
+        global $CFG, $PDOX;
+
+        if ( isset($CFG->dataroot) && strlen($CFG->dataroot) > 0 ) return;
+
+        // Need to deal with the post 2018-02 situation where we don't even
+        // have a content column in blob_file
+        try {
+            $stmt = $PDOX->prepare("SELECT file_sha256
+                FROM {$CFG->dbprefix}blob_file
+                WHERE blob_id IS NULL AND path IS NULL AND content IS NOT NULL AND file_id = :ID");
+            $stmt->execute(array(':ID' => $file_id));
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if ( ! $row ) return false;
+        } catch(\Exception $e) { // No column for old blobs
+            // error_log("Content column is not present in blob_file");
+            return false;
+        }
+
+        $file_sha256 = $row['file_sha256'];
+
+        // Do we already have it in blob_blob?
+        $stmt = $PDOX->prepare("SELECT blob_id FROM {$CFG->dbprefix}blob_blob WHERE blob_sha256 = :SHA");
+        $stmt->execute(array(":SHA" => $file_sha256));
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if ( $row ) {
+            $blob_id = $row['blob_id'];
+            $stmt = $PDOX->prepare("UPDATE {$CFG->dbprefix}blob_file
+                SET content=NULL, blob_id=:BID WHERE file_id = :ID");
+            $stmt->execute(array(':BID' => $blob_id, ':ID' => $file_id));
+            error_log("Migration fid=$file_id to existing blob_blob row $blob_id sha=$file_sha256");
+            return true;
+        }
+        // error_log("No row for $file_sha256");
+
+        $lob = false;
+        $stmt = $PDOX->prepare("SELECT content FROM {$CFG->dbprefix}blob_file WHERE file_id = :ID");
+        $stmt->execute(array(":ID" => $file_id));
+        $stmt->bindColumn(1, $lob, \PDO::PARAM_LOB);
+        $stmt->fetch(\PDO::FETCH_BOUND);
+
+        if ( ! is_string($lob) ) {
+            $retval = "Error: LOB is not string fid=$file_id sha=$file_sha256";
+            error_log($retval);
+            return $retval;
+        }
+        // error_log("Lob size=".strlen($lob));
+
+        $stmt = $PDOX->prepare("INSERT INTO {$CFG->dbprefix}blob_blob
+            (blob_sha256, content, created_at)
+            VALUES (?, ?, NOW())");
+        $stmt->bindParam(1, $file_sha256);
+        $stmt->bindParam(2, $lob, \PDO::PARAM_STR);
+        // $stmt->bindParam(2, $fp, \PDO::PARAM_LOB);
+        $PDOX->beginTransaction();
+        $stmt->execute();
+        $blob_id = 0+$PDOX->lastInsertId();
+        $PDOX->commit();
+
+        // Check if it made it...
+        $stmt = $PDOX->prepare("SELECT blob_id FROM {$CFG->dbprefix}blob_blob WHERE blob_sha256 = :SHA");
+        $stmt->execute(array(":SHA" => $file_sha256));
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if ( $row ) {
+            $blob_id = $row['blob_id'];
+            $stmt = $PDOX->prepare("UPDATE {$CFG->dbprefix}blob_file
+                SET content=NULL, blob_id=:BID WHERE file_id = :ID");
+            $stmt->execute(array(':BID' => $blob_id, ':ID' => $file_id));
+            error_log("Migration fid=$file_id to new blob_blob row $blob_id sha=$file_sha256");
+            return true;
+        }
+
+        // Bummer if this happens - doubtful but worth double checking.
+        $retval = "Error: Could not find new blob_id=$blob_id for file_id=$file_id sha=$file_sha256";
+        error_log($retval);
+        return $retval;
+    }
+
+    /** Check and migrate a blob to its corresponding file
+     *
+     * @return mixed true if the file was migrated, false if the file
+     *      was not migrated, and a string if an error was enountered
+     */
+    public static function blob2file($file_id)
+    {
+        global $CFG, $PDOX;
+
+        if ( !isset($CFG->dataroot) || strlen($CFG->dataroot) < 1 ) return;
+
+        $stmt = $PDOX->prepare("SELECT file_sha256, blob_id
+            FROM {$CFG->dbprefix}blob_file
+            WHERE path IS NULL AND file_id = :ID");
+        $stmt->execute(array(':ID' => $file_id));
+
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        if ( ! $row ) return false;
+
+        $blob_id = $row['blob_id'];
+        $file_sha256 = $row['file_sha256'];
+        $blob_folder = BlobUtil::mkdirSha256($file_sha256);
+        if ( ! $blob_folder ) {
+            return "Error: migrate=$file_id folder failed sha=$file_sha256";
+        }
+        $blob_name =  $blob_folder . '/' . $file_sha256;
+
+        $lob = false;
+        if ( ! $blob_id ) {
+            // Cope gracefully when there is no content column in blob_file
+            try {
+                $lstmt = $PDOX->prepare("SELECT content FROM {$CFG->dbprefix}blob_file WHERE file_id = :ID");
+                $lstmt->execute(array(":ID" => $file_id));
+                $lstmt->bindColumn(1, $lob, \PDO::PARAM_LOB);
+                $lstmt->fetch(\PDO::FETCH_BOUND);
+            } catch (\Exception $e) {
+                return "Error: No content to migrate for legacy blob file_id=$file_id";
+            }
+        } else {
+            $lstmt = $PDOX->prepare("SELECT content FROM {$CFG->dbprefix}blob_blob WHERE blob_id = :ID");
+            $lstmt->execute(array(":ID" => $blob_id));
+            $lstmt->bindColumn(1, $lob, \PDO::PARAM_LOB);
+            $lstmt->fetch(\PDO::FETCH_BOUND);
+        }
+
+        if ( ! is_string($lob) ) {
+            return "Error: LOB is not a string. fi=$file_id bi=$blob_id";
+        }
+
+        $retval = file_put_contents($blob_name, $lob);
+        if ( $retval != strlen($lob) ) {
+            return "Error: Failed to write fi=$file_id (".strlen($lob).") to $blob_name";
+        }
+        error_log("Migrated fi=$file_id (".strlen($lob).") to $blob_name");
+        $lstmt = $PDOX->prepare("UPDATE {$CFG->dbprefix}blob_file
+            SET path=:PATH, blob_id=NULL WHERE file_id = :ID");
+        $lstmt->execute(array(
+            ":ID" => $file_id,
+            ":PATH" => $blob_name
+        ));
+
+        // Make sure to handle the fact that content might not be there...
+        try {
+            $lstmt = $PDOX->prepare("UPDATE {$CFG->dbprefix}blob_file
+                SET content=NULL WHERE file_id = :ID");
+            $lstmt->execute(array( ":ID" => $file_id));
+        } catch (\Exception $e ) {
+            // No problem - the column won't be there...
+        }
+        return true;
+    }
+
 }
+

@@ -7,6 +7,7 @@ LTIX::getConnection();
     if ( !isset($maxversion) ) $maxversion = 0;
     if ( !isset($maxpath) ) $maxpath = '';
 
+    $ticks = time();
     // Check to see if the tables need to be created
     if ( isset($DATABASE_INSTALL) && $DATABASE_INSTALL !== false ) {
         foreach ( $DATABASE_INSTALL as $entry ) {
@@ -32,11 +33,30 @@ LTIX::getConnection();
                     $DATABASE_POST_CREATE($entry[0]);
                 }
             }
+            $delta = time() - $ticks;
+            if ( $delta > 1 ) echo("--- Ellapsed time=".$delta." seconds<br/>\n");
+            $ticks = time();
         }
+    } else {
+        echo("-- Set version for ".$path."<br/>");
+        error_log("-- Set version for ".$path);
+        $sql = "INSERT INTO {$plugins}
+            ( plugin_path, version, created_at, updated_at ) VALUES
+            ( :plugin_path, :version, NOW(), NOW() )
+            ON DUPLICATE KEY
+            UPDATE version = :version, updated_at = NOW()";
+        $values = array( ":plugin_path" => $path,
+                ":version" => $CFG->dbversion);
+        $q = $PDOX->queryReturnError($sql, $values);
+        if ( ! $q->success ) die("Unable to set version for ".$path." ".$q->errorimplode."<br/>".$entry[1] );
+        $delta = time() - $ticks;
+        if ( $delta > 1 ) echo("--- Ellapsed time=".$delta." seconds<br/>\n");
+        $ticks = time();
     }
 
     // Check to see if there is any upgrading needed
     if ( isset($DATABASE_UPGRADE) && $DATABASE_UPGRADE !== false ) {
+        echo("-- Checking upgrade $path <br/>\n");
         $sql = "SELECT version FROM {$plugins} WHERE plugin_path = :plugin_path";
         $values = array( ":plugin_path" => $path);
         $q = $PDOX->queryReturnError($sql, $values);
@@ -47,6 +67,9 @@ LTIX::getConnection();
         }
         echo("-- Current data model version $version <br/>\n");
         $newversion = $DATABASE_UPGRADE($version);
+        $delta = time() - $ticks;
+        if ( $delta > 1 ) echo("--- Ellapsed time=".$delta." seconds<br/>\n");
+        $ticks = time();
         if ( $newversion > $maxversion ) {
             $maxversion = $newversion;
             $maxpath = $path;
@@ -55,17 +78,21 @@ LTIX::getConnection();
             echo("-- WARNING: Database version=$newversion for $path higher than
                 \$CFG->dbversion=$CFG->dbversion in setup.php<br/>\n");
         }
+        if ( $newversion < $version ) {
+            echo("-- Warning: new version $newversion for $path is less than existing version $version <br/>\n");
+        }
         if ( $newversion > $version ) {
             echo("-- Upgraded to data model version $newversion <br/>\n");
-            $sql = "INSERT INTO {$plugins}
-                ( plugin_path, version, created_at, updated_at ) VALUES
-                ( :plugin_path, :version, NOW(), NOW() )
-                ON DUPLICATE KEY
-                UPDATE version = :version, updated_at = NOW()";
-            $values = array( ":version" => $newversion, ":plugin_path" => $path);
-            $q = $PDOX->queryReturnError($sql, $values);
-            if ( ! $q->success ) die("Unable to update version for ".$path." ".$q->errorimplode."<br/>".$entry[1] );
         }
+
+        $sql = "INSERT INTO {$plugins}
+            ( plugin_path, version, created_at, updated_at ) VALUES
+            ( :plugin_path, :version, NOW(), NOW() )
+            ON DUPLICATE KEY
+            UPDATE version = :version, updated_at = NOW()";
+        $values = array( ":version" => $newversion, ":plugin_path" => $path);
+        $q = $PDOX->queryReturnError($sql, $values);
+        if ( ! $q->success ) die("Unable to update version for ".$path." ".$q->errorimplode."<br/>".$entry[1] );
     }
 
     // Make sure these do not run twice

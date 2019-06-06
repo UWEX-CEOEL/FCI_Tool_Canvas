@@ -22,32 +22,88 @@ $OUTPUT->topNav();
 require_once("sanity-db.php");
 ?>
 <div id="iframe-dialog" title="Read Only Dialog" style="display: none;">
-   <iframe name="iframe-frame" style="height:600px" id="iframe-frame" 
-    src="<?= $OUTPUT->getSpinnerUrl() ?>"></iframe>
+   <img src="<?= $OUTPUT->getSpinnerUrl() ?>" id="iframe-spinner"><br/>
+   <iframe name="iframe-frame" style="height:600px" id="iframe-frame"
+    onload="document.getElementById('iframe-spinner').style.display='none';">
+   </iframe>
 </div>
-<h1>Welcome Adminstrator</h1>
+<h1>Administration Console</h1>
 <ul>
 <li>
-  <a href="upgrade" title="Upgrade Database" target="iframe-frame"
-  onclick="showModalIframe(this.title, 'iframe-dialog', 'iframe-frame', _TSUGI.spinnerUrl, true);" >
-  Upgrade Database 
+  <a href="#" title="Upgrade Database" 
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'upgrade', _TSUGI.spinnerUrl, true); return false;" >
+  Upgrade Database
   </a>
+</li>
 <li>
-  <a href="nonce" title="Check Nonces" target="iframe-frame"
-  onclick="showModalIframe(this.title, 'iframe-dialog', 'iframe-frame', _TSUGI.spinnerUrl);" >
-  Check Nonces 
+  <a href="#" title="Check Nonces"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'nonce', _TSUGI.spinnerUrl); return false;" >
+  Check Nonces
   </a></li>
 <li>
-  <a href="recent" title="Recent Logins" target="iframe-frame"
-  onclick="showModalIframe(this.title, 'iframe-dialog', 'iframe-frame', _TSUGI.spinnerUrl);" >
-  Recent Logins 
+  <a href="#" title="Recent Logins"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'recent', _TSUGI.spinnerUrl); return false;" >
+  Recent Logins
   </a></li>
-<li><a href="context/">View Contexts</a></li>
-<?php if ( $CFG->providekeys ) { ?>
-<li><a href="key">Manage Access Keys</a></li>
+<li>
+  <a href="#" title="Check database size"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'dbsize.php', _TSUGI.spinnerUrl); return false;" >
+  Check database size
+  </a></li>
+<li>
+  <a href="#" title="Remove 12345 Data"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'clear12345', _TSUGI.spinnerUrl); return false;" >
+  Remove 12345 Data
+  </a></li>
+<?php if ( isset($CFG->websocket_url) ) {?>
+<li>
+  <a href="#" title="Check Socket Server"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'sock-test', _TSUGI.spinnerUrl, true); return false;" >
+  Check socket server at <?= htmlentities($CFG->websocket_url) ?>
+  </a>
+</li>
 <?php } ?>
+<li>
+  <a href="#" title="Test E-Mail"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'testmail', _TSUGI.spinnerUrl); return false;" >
+  Test E-Mail
+  </a></li>
+<li>
+  <a href="#" title="Event Status"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'events', _TSUGI.spinnerUrl, true); return false;" >
+  Event Status
+  </a>
+</li>
+<li><a href="context/">View Contexts</a></li>
+<li><a href="activity/">View Activity</a></li>
+<li><a href="key">Manage Access Keys</a></li>
 <li><a href="install">Manage Installed Modules</a></li>
+<li><a href="external">Manage External Tools</a></li>
+<li>
+  <a href="#" title="Blob Status"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'blob_status', _TSUGI.spinnerUrl, true); return false;" >
+  BLOB/File Status
+  </a>
+</li>
+<li>
+  <a href="#" title="Blob Migration"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'blob_move', _TSUGI.spinnerUrl, true); return false;" >
+  BLOB/File Migration
+  </a>
+</li>
+<li>
+  <a href="#" title="Blob Cleanup"
+  onclick="showModalIframeUrl(this.title, 'iframe-dialog', 'iframe-frame', 'blob_clean', _TSUGI.spinnerUrl, true); return false;" >
+  Unreferenced BLOB Cleanup
+  </a>
+</li>
 </ul>
+<?php if ( $CFG->DEVELOPER ) { ?>
+<p>Note: You have $CFG-&gt;DEVELOPER enabled. When this is enabled, there are developer-oriented
+"testing" menus shown and the Admin links are more obvious.
+You should set DEVELOPER to <b>false</b> for production systems exposed to end users.
+</p>
+<?php } ?>
 <?php
 
 $OUTPUT->footer();

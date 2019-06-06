@@ -9,7 +9,7 @@ try {
 } catch(\PDOException $ex){
     $msg = $ex->getMessage();
     error_log("DB connection: ".$msg);
-    echo('<div style="background-color: red" class="alert alert-danger" style="margin: 10px;">'."\n");
+    echo('<div class="alert alert-danger" style="margin: 10px;">'."\n");
   if ( strpos($msg, 'Unknown database') !== false ||
        strpos($msg, 'Access denied for user') !== false ) {
     echo("<p>An error has occurred.  Either your database has 
@@ -22,6 +22,7 @@ MAMP or XAMPP, you may need to run commands like this:</p>
     GRANT ALL ON tsugi.* TO 'ltiuser'@'localhost' IDENTIFIED BY 'ltipassword';
     GRANT ALL ON tsugi.* TO 'ltiuser'@'127.0.0.1' IDENTIFIED BY 'ltipassword';
 </pre>
+<p>Note: MySQL 8.0 may require different commands.</p>
 <p>Make sure to choose appropriate passwords when setting this up.</p>
 <p>If you are running in a hosted environment and are using an admin tool like
 CPanel (or equivalent).  You must user this interface to create a database,
@@ -31,7 +32,7 @@ In some systems, a database adminstrator will create the database,
 user, and password and simply give them to you.
 <p>
 Once you have the database, account and password you must update your
-<code>config.php</code> with this information.</p>");
+<code>tsugi/config.php</code> with this information.</p>");
 echo('
 <p><b>Database Users</b></p>
 <p>
@@ -39,7 +40,7 @@ The user and password for the database connection are setup using either a
 SQL <code>GRANT</code> command or created in an adminstration tool like CPanel.
 Or perhaps a system administrator created the database and gave you the
 account and password to access the database.</p>
-<p>Make sure to check the values in your <code>config.php</code> for
+<p>Make sure to check the values in your <code>tsugi/config.php</code> for
 <pre>
     $CFG->dbuser    = \'ltiuser\';
     $CFG->dbpass    = \'ltipassword\';
@@ -51,7 +52,7 @@ To make sure they match the account and password assigned to your database.
         strpos($msg, 'Connection refused') !== false) {
         echo('<p>It appears that you cannot connect to your MySQL server at
 all.  The most likely problem is the wrong host or port in this option
-in your <code>config.php</code> file:
+in your <code>tsugi/config.php</code> file:
 <pre>
 $CFG->pdo       = \'mysql:host=127.0.0.1;dbname=tsugi\';
 # $CFG->pdo       = \'mysql:host=127.0.0.1;port=8889;dbname=tsugi\'; // MAMP
@@ -66,9 +67,13 @@ omit "port=" in the PDO string it assumes 3306.  If you are using MAMP
 this is usually moved to port 8889.  If neither 3306 nor 8889 works you
 probably have a bad host name.  Or talk to your system administrator.
 </p>
+<p>Note: Tsugi works best with MySQL 5.x.   Some of the setup and commands may need
+to be different for MySQL 8.0.
+</p>
 ');
 } else {
 echo("<p>There is a problem with your database connection.</p>\n");
+echo("<p>Tsugi works best with MySQL 5.x.</p>\n");
 }
 
     echo("<p>Database error detail: ".$msg."</p>\n");
@@ -88,17 +93,22 @@ $table_fields = $PDOX->metadata($plugins);
 if ( $table_fields === false ) {
     echo('<div class="alert alert-danger" style="margin: 10px;">'."\n");
     echo("<p>It appears that your database connection is working properly
-but you have no tables in your database.  To create the initial tables
-needed for this application, use the 
-<a href=\"".$CFG->wwwroot."/admin\">'Admin'</a>
-/ Upgrade Database feature.  To unlock the Admin screen, you will be prompted
-for the administrator master password as configured in <code>config.php</code>
-in the <code>\$CFG->adminpw</code> setting.
-</p>
-<p>
-If the UI does not look correct(i.e. the CSS files are not loading and this
-text is not outlined in red), you many need to edit the 
-<code>\$CFG->wwwroot</code> setting in the <code>config.php</code> folder.
+but you have no tables in your database.  There are two ways to create these tables:
+<ul>
+<li><p>The simplest way is to navigate the
+<a href=\"".$CFG->wwwroot."/admin\">'Administration'</a> console, 
+enter the administrator master password as specified in <code>\$CFG->adminpw</code>
+and select
+'Upgrade Database'.
+</p></li>
+</ul>
+<p>Another way to create the tables (or upgrade them) from the command line:
+<pre>
+cd ... /tsugi/admin
+php upgrade.php
+</pre>
+Make sure to be in the <code>admin</code> folder before running 
+the <code>upgrade.php</code> script.
 </p>
 ");
     echo("\n</div>\n");
@@ -110,7 +120,7 @@ text is not outlined in red), you many need to edit the
         echo('<div class="alert alert-danger" style="margin: 10px;">'."\n");
         echo("<p>Warning: Database version=$actualdbversion should be
         software version=$CFG->dbversion - please run\n");
-        echo('<a href="'.$CFG->wwwroot.'/admin/">'."'Upgrade Database'</a> in the Admin console</p>\n");
+        echo("'Upgrade Database in the <a href=\"".$CFG->wwwroot.'/admin/">'."Administration console</a></p>\n");
         echo("\n</div>\n");
         error_log("Warning: DB current version=$actualdbversion expected version=$CFG->dbversion");
     }

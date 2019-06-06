@@ -2,9 +2,12 @@
 
 namespace Tsugi\Core;
 
+use \Tsugi\Util\U;
 use \Tsugi\Util\LTI;
+use \Tsugi\Util\LTI13;
 use \Tsugi\UI\Output;
 use \Tsugi\Util\Net;
+use \Tsugi\Google\GoogleClassroom;
 
 /**
  * This is a class to provide access to the user's result data.
@@ -30,7 +33,7 @@ class Result extends Entity {
      * it is in this variable.  If there is not yet a grade for
      * this user/link combination, this will be false.
      */
-    public $grade = false;
+    public $grade = null;
 
     // Looks up a result for a potentially different user_id so we make
     // sure they are in the same key/ context / link as the current user
@@ -39,7 +42,7 @@ class Result extends Entity {
         global $CFG, $PDOX, $CONTEXT, $LINK;
         $stmt = $PDOX->queryDie(
             "SELECT result_id, R.link_id AS link_id, R.user_id AS user_id,
-                sourcedid, service_id, grade, note, R.json AS json
+                sourcedid, service_id, grade, note, R.json AS json, R.note AS note
             FROM {$CFG->dbprefix}lti_result AS R
             JOIN {$CFG->dbprefix}lti_link AS L
                 ON L.link_id = R.link_id AND R.link_id = :LID
@@ -127,8 +130,139 @@ class Result extends Entity {
      *
      * @param $grade A new grade - floating point number between 0.0 and 1.0
      * @param $row An optional array with the data that has the result_id, sourcedid,
-     * and service (url) if this is not present, the data is pulled from the LTI
-     * session for the current user/link combination.
+     * service (url), key_key, and secret.  If these are not present, the data
+     * is pulled from the LTI session for the current user/link combination.
+     * @param $debug_log An (optional) array (by reference) that returns the
+     * steps that were taken.
+     * Each entry is an array with the [0] element a message and an optional [1]
+     * element as some detail (i.e. like a POST body)
+     *
+     * @return mixed If this works it returns true.  If not, you get
+     * a string with an error.
+     *
+     */
+    public static function gradeSendStatic($grade, $row=false, &$debug_log=false) {
+        global $CFG, $LINK;
+        global $LastPOXGradeResponse;
+        $LastPOXGradeResponse = false;
+
+        $PDOX = LTIX::getConnection();
+
+        // Secret and key from session to avoid crossing tenant boundaries
+        $key_key = false;
+        $user_key = false;
+        $secret = false;
+        $lti13_privkey = false;
+        if ( $row !== false ) {
+            $result_url = isset($row['result_url']) ? $row['result_url'] : false;
+            $sourcedid = isset($row['sourcedid']) ? $row['sourcedid'] : false;
+            $service = isset($row['service']) ? $row['service'] : false;
+            $key_key = isset($row['key_key']) ? $row['key_key'] : false;
+            $user_key = isset($row['user_key']) ? $row['user_key'] : false;
+            $secret = isset($row['secret']) ? LTIX::decrypt_secret($row['secret']) : false;
+            // Fall back to session if it is missing
+            if ( $service === false ) $service = LTIX::ltiParameter('service');
+            $result_id = isset($row['result_id']) ? $row['result_id'] : false;
+            $lti13_privkey = isset($row['lti13_privkey']) ? LTIX::decrypt_secret($row['lti13_privkey']) : false;
+            $lti13_lineitem = isset($row['lti13_lineitem']) ? $row['lti13_lineitem'] : false;
+            $lti13_token_url = isset($row['lti13_token_url']) ? $row['lti13_token_url'] : false;
+        } else {
+            $result_url = LTIX::ltiParameter('result_url');
+            $sourcedid = LTIX::ltiParameter('sourcedid');
+            $service = LTIX::ltiParameter('service');
+            $result_id = LTIX::ltiParameter('result_id');
+            $lti13_lineitem = LTIX::ltiParameter('lti13_lineitem');
+            $lti13_token_url = LTIX::ltiParameter('lti13_token_url');
+        }
+
+        // Check if we are to use SHA256 as the signature
+        $signature = false;
+        if ( isset($LINK) ) {
+            $signature = $LINK->settingsGet('oauth_signature_method');
+            // error_log("Sending... sig=$signature");
+        }
+
+        // Secret and key from session to avoid crossing tenant boundaries
+        if ( ! $key_key ) $key_key = LTIX::ltiParameter('key_key');
+        if ( ! $user_key ) $user_key = LTIX::ltiParameter('user_key');
+        if ( ! $secret ) $secret = LTIX::decrypt_secret(LTIX::ltiParameter('secret'));
+        if ( ! $lti13_privkey ) $lti13_privkey = LTIX::decrypt_secret(LTIX::ltiParameter('lti13_privkey'));
+
+        // Get the IP Address
+        $ipaddr = Net::getIP();
+
+        // Update the local copy of the grade in the lti_result table
+        if ( $PDOX !== false && ! empty($result_id) ) {
+            $stmt = $PDOX->queryReturnError(
+                "UPDATE {$CFG->dbprefix}lti_result SET grade = :grade,
+                    ipaddr = :IP, updated_at = NOW() WHERE result_id = :RID",
+                array(
+                    ':grade' => $grade,
+                    ':IP' => $ipaddr,
+                    ':RID' => $result_id)
+            );
+
+            if ( $stmt->success ) {
+                $msg = "Grade stored locally result_id=".$result_id." grade=$grade";
+            } else {
+                $msg = "Grade NOT stored locally result_id=".$result_id." grade=$grade";
+            }
+            error_log($msg);
+            if ( is_array($debug_log) )  $debug_log[] = array($msg);
+        }
+
+        // A broken launch
+        if ( $key_key == false || $secret === false ) {
+            error_log("Result::gradeSend stored data locally");
+            return false;
+        }
+
+        // TODO: Fix this
+        $comment = "";
+        // Check is this is a Google Classroom Launch
+        if ( isset($_SESSION['lti']) && isset($_SESSION['lti']['gc_submit_id']) ) {
+            $status = GoogleClassroom::gradeSend(intval($grade*100));
+
+        // TODO: Cache the token and renew
+        // LTI 1.3 grade passback - Prefer if available
+        } else if ( strlen($lti13_privkey) > 0 && strlen($lti13_lineitem) > 0 && strlen($lti13_token_url) > 0 ) {
+            error_log("Getting token key_key=$key_key lti13_token_url=$lti13_token_url");
+
+            $grade_token = LTI13::getGradeToken($CFG->wwwroot, $key_key, $lti13_token_url, $lti13_privkey, $debug_log);
+
+            $comment = "Sending grade $grade user_key=$user_key lti13_lineitem=$lti13_lineitem grade_token=$grade_token";
+            error_log($comment);
+            $comment = "Sending grade $grade user_key=$user_key";
+            $status = LTI13::sendLineItemResult($user_key, $grade, $comment, $lti13_lineitem,
+                        $grade_token, $debug_log);
+
+        // Classic POX call
+        } else if ( strlen($key_key) > 0 && strlen($secret) > 0 && strlen($sourcedid) > 0 && strlen($service) > 0 ) {
+            $status = LTI::sendPOXGrade($grade, $sourcedid, $service, $key_key, $secret, $debug_log, $signature);
+
+        // LTI 2.x call - Least likely
+        } else if ( strlen($key_key) > 0 && strlen($secret) > 0 && strlen($result_url) > 0 ) {
+            $status = LTI::sendJSONGrade($grade, $comment, $result_url, $key_key, $secret, $debug_log, $signature);
+
+        } else {
+            return true;   // Local storage only
+        }
+
+        return $status;
+    }
+
+    /**
+     * Send a grade and update our local copy
+     *
+     * Call the right LTI service to send a new grade up to the server.
+     * update our local cached copy of the server_grade and the date
+     * retrieved. This routine pulls the key and secret from the LTIX
+     * session to avoid crossing cross tennant boundaries.
+     *
+     * @param $grade A new grade - floating point number between 0.0 and 1.0
+     * @param $row An optional array with the data that has the result_id, sourcedid,
+     * service (url), key_key, and secret.  If these are not present, the data
+     * is pulled from the LTI session for the current user/link combination.
      * @param $debug_log An (optional) array (by reference) that returns the
      * steps that were taken.
      * Each entry is an array with the [0] element a message and an optional [1]
@@ -140,92 +274,35 @@ class Result extends Entity {
      */
     public function gradeSend($grade, $row=false, &$debug_log=false) {
         global $CFG, $USER;
-        global $LastPOXGradeResponse;
-        $LastPOXGradeResponse = false;
 
-        $PDOX = LTIX::getConnection();
+        $status = self::gradeSendStatic($grade, $row, $debug_log);
 
-        // Secret and key from session to avoid crossing tenant boundaries
-        $key_key = LTIX::ltiParameter('key_key');
-        $secret = LTIX::decrypt_secret(LTIX::ltiParameter('secret'));
         if ( $row !== false ) {
-            $result_url = isset($row['result_url']) ? $row['result_url'] : false;
             $sourcedid = isset($row['sourcedid']) ? $row['sourcedid'] : false;
-            $service = isset($row['service']) ? $row['service'] : false;
-            // Fall back to session if it is missing
-            if ( $service === false ) $service = LTIX::ltiParameter('service');
-            $result_id = isset($row['result_id']) ? $row['result_id'] : false;
         } else {
-            $result_url = LTIX::ltiParameter('result_url');
             $sourcedid = LTIX::ltiParameter('sourcedid');
-            $service = LTIX::ltiParameter('service');
-            $result_id = LTIX::ltiParameter('result_id');
         }
 
-        // Get the IP Address
-        $ipaddr = Net::getIP();
-
-        // Update result in the database and in the LTI session area and 
-        // our local copy 
-        $ltidata = $this->session_get('lti');
-        if ( $ltidata ) {
-            $ltidata['grade'] = $grade;
-            $this->session_put('lti', $ltidata);
-        }
-
-        // Update the local copy of the grade in the lti_result table
-        if ( $PDOX !== false && $result_id !== false ) {
-            $stmt = $PDOX->queryReturnError(
-                "UPDATE {$CFG->dbprefix}lti_result SET grade = :grade,
-                    ipaddr = :IP, updated_at = NOW() WHERE result_id = :RID",
-                array(
-                    ':grade' => $grade,
-                    ':IP' => $ipaddr,
-                    ':RID' => $result_id)
-            );
-
-            if ( $stmt->success ) {
-                $msg = "Grade updated result_id=".$result_id." grade=$grade";
-            } else {
-                $msg = "Grade NOT updated result_id=".$result_id." grade=$grade";
-            }
-            error_log($msg);
-            if ( is_array($debug_log) )  $debug_log[] = array($msg);
-        }
-
-        // A broken launch
-        if ( $key_key == false || $secret === false || !isset($USER) ) {
-            error_log("Result::gradeSend stored data locally");
-            return false;
-        }
-
-        // TODO: Fix this
-        $comment = "";
-        // If we have a result_url and either ($CFG->prefer_lti1_for_grade_send is false or we don't have a $service),
-        // use result_url to send the grade
-        if ( strlen($result_url) > 0 && ($CFG->prefer_lti1_for_grade_send === false || $service === false) ) {
-            $status = LTI::sendJSONGrade($grade, $comment, $result_url, $key_key, $secret, $debug_log);
-        // Otherwise use the more established service call
-            //echo('Debug : SendPOXGrade with result_url'.$status);
-        } else if ( $sourcedid !== false && $service !== false ) {
-            $status = LTI::sendPOXGrade($grade, $sourcedid, $service, $key_key, $secret, $debug_log);
-            //echo('Debug : SendPOXGrade with sourceid'.$status);
-        } else {
-            echo('Debug : SendPOXGrade Local Storage Only'.$sourcedid);
-            return true;   // Local storage only
-        }
-
+        // Update the session view of the grade
         if ( $status === true ) {
-            $msg = 'Grade sent '.$grade.' to '.$sourcedid.' by '.$USER->id;
-            if ( is_array($debug_log) )  $debug_log[] = array($msg);
-            error_log($msg);
+            $ltidata = $this->session_get('lti');
+            if ( $ltidata && $row !== false ) {
+                $ltidata['grade'] = $grade;
+                $this->session_put('lti', $ltidata);
+            }
+            if ( strlen($sourcedid) > 0 ) {
+                $msg = 'Grade sent '.$grade.' to '.$sourcedid.' by '.$USER->id;
+                if ( is_array($debug_log) )  $debug_log[] = array($msg);
+                error_log($msg);
+            }
         } else {
             $msg = 'Grade failure '.$grade.' to '.$sourcedid.' by '.$USER->id;
             if ( is_array($debug_log) )  $debug_log[] = array($msg);
             error_log($msg);
+            $svd = Output::safe_var_dump($debug_log);
+            error_log("Grade falure detail:\n".$svd);
             return $status;
         }
-
 
         return $status;
     }
@@ -298,10 +375,44 @@ class Result extends Entity {
         $PDOX = $this->launch->pdox;
 
         $stmt = $PDOX->queryDie(
-            "UPDATE {$CFG->dbprefix}lti_result SET json = :json, updated_at = NOW(), user_updated= NOW()
+            "UPDATE {$CFG->dbprefix}lti_result SET json = :json, updated_at = NOW()
                 WHERE result_id = :RID",
             array(
                 ':json' => $json,
+                ':RID' => $this->id)
+        );
+    }
+
+    /**
+     * Get the Note for this result
+     */
+    public function getNote()
+    {
+        global $CFG;
+        $PDOX = $this->launch->pdox;
+
+        $stmt = $PDOX->queryDie(
+            "SELECT note FROM {$CFG->dbprefix}lti_result
+                WHERE result_id = :RID",
+            array(':RID' => $this->id)
+        );
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+        return $row['note'];
+    }
+
+    /**
+     * Set the Note for this result
+     */
+    public function setNote($note)
+    {
+        global $CFG;
+        $PDOX = $this->launch->pdox;
+
+        $stmt = $PDOX->queryDie(
+            "UPDATE {$CFG->dbprefix}lti_result SET note = :note, updated_at = NOW()
+                WHERE result_id = :RID",
+            array(
+                ':note' => $note,
                 ':RID' => $this->id)
         );
     }

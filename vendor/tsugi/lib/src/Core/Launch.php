@@ -72,14 +72,9 @@ class Launch {
     public $redirect_url = null;
 
     /**
-     * If this is non-false, we send a 403 (see also $error_message)
-    WARDED_FOR
-    public $send_403 = false;
-
-    /**
      * Get the base string from the launch.
      *
-     * @return This is null if it is not the original launch.
+     * This is null if it is not the original launch.
      * it is not restored when the launch is restored from
      * the session.
      */
@@ -116,6 +111,26 @@ class Launch {
      */
     public function session_flush() {
         return LTIX::wrapped_session_flush($this->session_object);
+    }
+
+    /**
+     * Pull a keyed variable from the LTI data in the current session with default
+     */
+    public function ltiParameter($varname, $default=false) {
+        $row = $this->session_get('lti', false);
+        if ( ! $row ) return $default;
+        if ( ! array_key_exists($varname, $row) ) return $default;
+        return $row[$varname];
+    }
+
+    /**
+     * Update a keyed variable from the LTI data in the current session with default
+     */
+    public function ltiParameterUpdate($varname, $value) {
+        $lti = $this->session_get('lti', false);
+        if ( ! $lti ) $lti = array(); // Should never happen
+        if ( is_array($lti) ) $lti[$varname] = $value;
+        $lti = $this->session_put('lti', $lti);
     }
 
     /**
@@ -161,6 +176,63 @@ class Launch {
         return $product == 'canvas';
     }
 
+    /**
+     * Indicate if this launch came from Moodle
+     */
+    public function isMoodle() {
+        $ext_lms = $this->ltiRawParameter('ext_lms', false);
+        $ext_lms = strtolower($ext_lms);
+        return strpos($ext_lms, 'moodle') === 0 ;
+    }
+
+    /**
+     * Indicate if this launch came from Coursera
+     */
+    public function isCoursera() {
+        $product = $this->ltiRawParameter('tool_consumer_info_product_family_code', false);
+        $tci_description = $this->ltiRawParameter('tool_consumer_instance_description', false);
+        return ( $product == 'ims' && $tci_description == 'Coursera');
+    }
+
+    /**
+     * set up parameters for an outbound launch from this launch
+     */
+    public function newLaunch($send_name=true, $send_email=true) {
+        $parms = array(
+            'lti_message_type' => 'basic-lti-launch-request',
+            'tool_consumer_info_product_family_code' => 'tsugi',
+            'tool_consumer_info_version' => '1.1',
+        );
+
+        // Some Tsugi Goodness
+        $form_id = "tsugi_form_id_".bin2Hex(openssl_random_pseudo_bytes(4));
+        $parms['ext_lti_form_id'] = $form_id;
+
+        if ( $this->user ) {
+            $parms['user_id'] = $this->user->id;
+            $parms['roles'] = $this->user->instructor ? 'Instructor' : 'Learner';
+            if ( $send_name ) $parms['lis_person_name_full'] = $this->user->displayname;
+            if ( $send_email ) $parms['lis_person_contact_email_primary'] = $this->user->email;
+            if ( $send_email || $send_email ) $parms['image'] = $this->user->image;
+        }
+        if ( $this->context ) {
+           $parms['context_id'] = $this->context->id;
+           $parms['context_title'] = $this->context->title;
+           $parms['context_label'] = $this->context->title;
+        }
+        if ( $this->link ) {
+           $parms['resource_link_id'] = $this->link->id;
+           $parms['resource_link_title'] = $this->link->title;
+        }
+        if ( $this->result ) {
+           $parms['resource_link_id'] = $this->link->id;
+           $parms['resource_link_title'] = $this->link->title;
+        }
+        foreach ( $parms as $k => $v ) {
+            if ( $v === false || $v === null ) unset($parms[$k]);
+        }
+        return $parms;
+    }
 
     /**
      * Dump out the internal data structures associated with the

@@ -2,20 +2,13 @@
 require_once "../../config.php";
 require_once $CFG->dirroot."/admin/admin_util.php";
 
-$local_path = route_get_local_path(__DIR__);
-if ( $local_path == "canvas-config.xml" ) {
-    require_once("canvas-config-xml.php");
-    return;
-}
-if ( $local_path == "casa.json" ) {
-    require_once("casa-json.php");
-    return;
-}
-
 use \Tsugi\Core\Settings;
 use \Tsugi\Core\LTIX;
 use \Tsugi\Core\ContentItem;
+use \Tsugi\Util\DeepLinkResponse;
+use \Tsugi\Util\U;
 use \Tsugi\Util\LTI;
+use \Tsugi\Util\LTI13;
 use \Tsugi\UI\Lessons;
 
 // No parameter means we require CONTEXT, USER, and LINK
@@ -24,18 +17,100 @@ $LAUNCH = LTIX::requireData(LTIX::USER);
 // Model
 $p = $CFG->dbprefix;
 
-$return_url = ContentItem::returnUrl();
-$allow_lti = ContentItem::allowLtiLinkItem();
-$allow_web = ContentItem::allowContentItem();
-$allow_import = ContentItem::allowImportItem();
+$deeplink = false;
+$lti13_privkey = false;
+if ( isset($LAUNCH->deeplink) ) $deeplink = $LAUNCH->deeplink;
+if ( $deeplink ) {
+    $return_url = $deeplink->returnUrl();
+    $allow_lti = $deeplink->allowLtiLinkItem();
+    $allow_web = $deeplink->allowContentItem();
+    $allow_import = $deeplink->allowImportItem();
+    $lti13_privkey = $LAUNCH->ltiParameter('lti13_privkey');
+    $lti13_privkey = $lti13_privkey ? LTIX::decrypt_secret($lti13_privkey) : false;
+} else {
+    $return_url = ContentItem::returnUrl();
+    $allow_lti = ContentItem::allowLtiLinkItem();
+    $allow_web = ContentItem::allowContentItem();
+    $allow_import = ContentItem::allowImportItem();
+}
 
 $OUTPUT->header();
 ?>
 <style>
-    .card {
-        border: 1px solid black;
-        margin: 5px;
-        padding: 5px;
+    .panel-default {
+        box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+        position: relative;
+    }
+    .panel-default:hover{
+        border: 1px solid #aaa;
+    }
+    .panel-body h3 {
+        margin-top: 0.5em;
+    }
+    .approw {
+        margin: 0;
+    }
+    .appcolumn {
+        padding: 0 4px;
+    }
+    h3.phase-title {
+        padding-left: 10px;
+    }
+    .keywords {
+        font-size: .85em;
+        font-style: italic;
+        color: #666;
+        margin: 0;
+        padding: 0;
+    }
+    .keyword-span {
+        text-transform: lowercase;
+    }
+    /* Created with cssportal.com CSS Ribbon Generator */
+    .ribbon {
+        position: absolute;
+        left: -5px; top: -5px;
+        z-index: 1;
+        overflow: hidden;
+        width: 75px; height: 75px;
+        text-align: right;
+    }
+    .ribbon span {
+        font-size: 14px;
+        font-weight: bold;
+        color: #FFF;
+        text-transform: uppercase;
+        text-align: center;
+        line-height: 20px;
+        transform: rotate(-45deg);
+        -webkit-transform: rotate(-45deg);
+        width: 100px;
+        display: block;
+        background: #dc3545;
+        box-shadow: 0 3px 10px -5px rgba(0, 0, 0, 1);
+        position: absolute;
+        top: 19px; left: -21px;
+    }
+    .ribbon span::before {
+        content: "";
+        position: absolute; left: 0; top: 100%;
+        z-index: -1;
+        border-left: 3px solid #dc3545;
+        border-right: 3px solid transparent;
+        border-bottom: 3px solid transparent;
+        border-top: 3px solid #dc3545;
+    }
+    .ribbon span::after {
+        content: "";
+        position: absolute; right: 0; top: 100%;
+        z-index: -1;
+        border-left: 3px solid transparent;
+        border-right: 3px solid #dc3545;
+        border-bottom: 3px solid transparent;
+        border-top: 3px solid #dc3545;
+    }
+    #box {
+        margin-top: 1em;
     }
 #loader {
       position: fixed;
@@ -71,7 +146,18 @@ if ( ($allow_lti || $allow_web || $allow_import) && isset($CFG->lessons) ) {
 
 // Load Tool Registrations
 if ( $allow_lti ) {
-    $registrations = findAllRegistrations();
+    $registrations = findAllRegistrations(false, true);
+
+    // Filter the registrations
+    if ( isset($CFG->storehide) && ! $USER->admin ) {
+        $filtered = array();
+        foreach($registrations as $name => $tool ) {
+            if ( isset($tool['tool_phase']) &&
+            preg_match($CFG->storehide, $tool['tool_phase']) == 1 ) continue;
+            $filtered[$name] = $tool;
+        }
+        $registrations = $filtered;
+    }
     if ( count($registrations) < 1 ) $registrations = false;
 } else {
     $registrations = false;
@@ -87,7 +173,7 @@ if ( ! $USER->instructor ) {
 }
 
 if ( ! $return_url ) {
-    echo("<p>This tool must be with LTI Link Content Item support</p>");
+    echo("<p>This tool must be launched with a Deep Linking request</p>");
     $OUTPUT->footer();
     return;
 }
@@ -109,24 +195,21 @@ if ( isset($_GET['install']) ) {
     $tool = $registrations[$install];
 
     $title = $tool['name'];
-    $text = $tool['description'];
     $fa_icon = isset($tool['FontAwesome']) ? $tool['FontAwesome'] : false;
     $icon = false;
     if ( $fa_icon !== false ) {
-        $icon = $CFG->staticroot.'/font-awesome-4.4.0/png/'.str_replace('fa-','',$fa_icon).'.png';
+        $icon = $CFG->fontawesome.'/png/'.str_replace('fa-','',$fa_icon).'.png';
     }
 
-    if ( $fa_icon ) {
-        echo('<i class="fa '.$fa_icon.' fa-3x" style="color: #1894C7; float:right; margin: 2px"></i>');
-    }
-    echo('<center>');
-    echo("<h1>".htmlent_utf8($title)."</h1>\n");
-    echo("<p>".htmlent_utf8($text)."</p>\n");
-    $script = isset($tool['script']) ? $tool['script'] : "index.php";
+    $script = isset($tool['script']) ? $tool['script'] : "index";
     $path = $tool['url'];
 
     // Set up to send the response
-    $retval = new ContentItem();
+    if ( $deeplink ) {
+        $retval = new DeepLinkResponse($deeplink);
+    } else {
+        $retval = new ContentItem();
+    }
     $points = false;
     $activity_id = false;
     if ( isset($tool['messages']) && is_array($tool['messages']) &&
@@ -136,14 +219,64 @@ if ( isset($_GET['install']) ) {
     }
     $custom = false;
     $retval->addLtiLinkItem($path, $title, $title, $icon, $fa_icon, $custom, $points, $activity_id);
-    $endform = '<a href="index.php" class="btn btn-warning">Back to Store</a>';
-    $content = $retval->prepareResponse($endform);
+    $return_url = $retval->returnUrl();
+
+    $params = $retval->getContentItemSelection();
+
+    if ( $deeplink ) {
+/*
+        $parts = preg_split('/\s+/', $lti13_privkey);
+        $better = "";
+        $indashes = false;
+        foreach($parts as $part) {
+            if ( strpos($part,'-----') === 0 ) {
+                if ( strlen($better) > 0 ) $better .= "\n";
+                $better .= $part;
+                $indashes = true;
+                continue;
+            }
+            if ( U::endsWith($part,'-----') > 0 ) {
+                $better .= ' ' . $part;
+                $indashes = false;
+                continue;
+            }
+            $better .= $indashes ? ' ' : "\n";
+            $better .= $part;
+        }
+        $lti13_privkey = $better;
+*/
+
+        $debug_log = array();
+        $issuer = $LAUNCH->ltiParameter('issuer_client');
+        $jwt = LTI13::base_jwt($issuer, 'subject', $debug_log);
+        $debug_log = array();
+        $launch_jwt = U::GET($_SESSION, 'tsugi_jwt');
+        if ( is_object($launch_jwt) && isset($launch_jwt->body) ) {
+            $body = $launch_jwt->body;
+            if ( isset($body->iss) ) $jwt['aud'] = $body->iss;
+            if ( isset($body->{LTI13::DEPLOYMENT_ID}) ) $jwt[LTI13::DEPLOYMENT_ID] = $body->{LTI13::DEPLOYMENT_ID};
+        }
+
+        foreach($jwt as $k => $v) {
+            $params->{$k} = $v;
+        }
+        $jws = LTI13::encode_jwt($params, $lti13_privkey);
+        $html = LTI13::build_jwt_html($return_url, $jws);
+        echo($html);
+        echo("<pre>\n");var_dump($_SESSION);echo("\n</pre>\n");
+        return;
+    }
+
+    $signature = $LAUNCH->ltiRawParameter('oauth_signature_method');
+    if ( $signature ) $params['oauth_signature_method'] = $signature;
+
+    $params = LTIX::signParameters($params, $return_url, "POST", "Install Content");
+
+    $debug=false; $iframeattr=false; $endform=false;
+    $content = LTI::postLaunchHTML($params, $return_url, $debug, $iframeattr, $endform);
     echo($content);
-    echo("</center>\n");
-    // echo("<pre>\n");print_r($tool);echo("</pre>\n");
-    $OUTPUT->footer();
     return;
-} 
+}
 
 // Handle the assignment install
 if ( $l && isset($_GET['assignment']) ) {
@@ -160,11 +293,11 @@ if ( $l && isset($_GET['assignment']) ) {
     // Sigh - some LMSs don't handle custom - sigh
     $path .= 'inherit=' . urlencode($_GET['assignment']);
     $fa_icon = 'fa-check-square-o';
-    $icon = $CFG->staticroot.'/font-awesome-4.4.0/png/'.str_replace('fa-','',$fa_icon).'.png';
+    $icon = $CFG->fontawesome.'/png/'.str_replace('fa-','',$fa_icon).'.png';
 
     // Compute the custom values
     $custom = array();
-    $custom['canvas_xapi_url'] = '$Canvas.xapi.url';
+    $custom['canvas_caliper_url'] = '$Caliper.url';
     if ( isset($lti->custom) ) {
         foreach($lti->custom as $entry) {
             if ( !isset($entry->key) ) continue;
@@ -284,32 +417,72 @@ if ( $registrations && $allow_lti ) {
     echo('<div class="tab-pane fade '.$active.' in" id="box">'."\n");
     $active = '';
 
+    echo('<p class="text-right">
+        <label class="sr-only" for="keywordFilter">Filter by keyword</label>
+        <input type="text" placeholder="Filter by keyword" id="keywordFilter">
+        </p>');
+
     $count = 0;
     foreach($registrations as $name => $tool ) {
+
+        // This will keep the rows nice
+        if ($count % 3 == 0) {
+            if ($count > 0) {
+                echo('</div>');
+            }
+            echo('<div class="row approw">');
+        }
 
         $title = $tool['name'];
         $text = $tool['description'];
         $fa_icon = isset($tool['FontAwesome']) ? $tool['FontAwesome'] : false;
         $icon = false;
         if ( $fa_icon !== false ) {
-            $icon = $CFG->staticroot.'/font-awesome-4.4.0/png/'.str_replace('fa-','',$fa_icon).'.png';
+            $icon = $CFG->fontawesome.'/png/'.str_replace('fa-','',$fa_icon).'.png';
         }
 
-        echo('<div style="border: 2px, solid, red;" class="card">');
+        $keywords = '';
+        if (isset($tool['keywords'])) {
+            sort($tool['keywords']);
+            $keywords = implode(", ", $tool['keywords']);
+        }
+
+        echo('<div class="col-sm-4 appcolumn">');
+
+        echo('<div class="panel panel-default" data-keywords="'.$keywords.'">');
+
+        $phase = isset($tool['tool_phase']) ? $tool['tool_phase'] : false;
+        if ($phase !== false) {
+            echo('<div class="ribbon ribbon-top-left"><span>'.$phase.'</span></div>');
+        }
+
+        echo('<div class="panel-body">');
         if ( $fa_icon ) {
             echo('<a href="index.php?install='.urlencode($name).'">');
             echo('<i class="fa '.$fa_icon.' fa-2x" style="color: #1894C7; float:right; margin: 2px"></i>');
             echo('</a>');
         }
-        echo('<p><strong>'.htmlent_utf8($title)."</strong></p>");
-        echo('<p>'.htmlent_utf8($text)."</p>\n");
-        echo('<center><a href="index.php?install='.urlencode($name).'" class="btn btn-default" role="button">Details</a></center>');
-        echo("</div>\n");
+        if ($phase !== false) {
+            echo('<h3 class="phase-title">');
+        } else {
+            echo('<h3>');
+        }
+        echo(htmlent_utf8($title)."</h3>");
+        echo('<p>'.htmlent_utf8($text)."</p>");
+        if ($keywords !== '') {
+            echo('<p class="keywords">Tags: <span class="keyword-span">'.$keywords.'</span></p>');
+        }
+        echo("</div><div class=\"panel-footer\">");
+        echo('<a href="index.php?install='.urlencode($name).'" class="btn btn-success pull-right" role="button"><span class="fa fa-plus" aria-hidden="true"></span> Install</a>');
+        echo('<a href="details/'.urlencode($name).'" class="btn btn-default" role="button">Details</a>');
+        echo("</div></div></div>\n");
 
         $count++;
     }
     if ( $count < 1 ) {
         echo("<p>No available tools</p>\n");
+    } else {
+        echo("</div>");
     }
     echo("</div>\n");
 }
@@ -406,13 +579,36 @@ if ( $l && $allow_import ) {
 echo("</div>\n"); // myTabContent
 
 $OUTPUT->footerStart();
-// https://github.com/LinZap/jquery.waterfall
 ?>
-<script type="text/javascript" src="<?= $CFG->staticroot ?>/js/waterfall-light.js"></script>
-<script>
-$(function(){
-    $('#box').waterfall({refresh: 0})
-});
-</script>
+    <script type="text/javascript">
+        var filter = filter || {};
+
+        filter.setUpListener = function() {
+            $("#keywordFilter").on("keyup", function(){
+                var search = $(this).val().toLowerCase();
+                $(".appcolumn").each(function(){
+                    var panel = $(this).find("div.panel");
+                    var words = panel.data("keywords");
+                    if (typeof words !== "undefined" && words.toLowerCase().indexOf(search) >= 0) {
+                        $(this).fadeIn("slow");
+                        var keywordSpan = panel.find("div.panel-body").find("p.keywords").find("span.keyword-span");
+                        var keywordText = keywordSpan.text().toLowerCase();
+                        keywordSpan.html(filter.boldSubstr(keywordText, search));
+                    } else {
+                        $(this).fadeOut("fast");
+                    }
+                });
+            });
+        };
+
+        filter.boldSubstr = function(string, needle) {
+            var regex = new RegExp(needle, 'g');
+            return string.replace(regex, "<strong>" + needle + "</strong>");
+        };
+
+        $(document).ready(function() {
+            filter.setUpListener();
+        });
+    </script>
 <?php
 $OUTPUT->footerend();

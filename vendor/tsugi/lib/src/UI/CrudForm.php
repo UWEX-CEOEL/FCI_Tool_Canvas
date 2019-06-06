@@ -1,6 +1,9 @@
 <?php
 
 namespace Tsugi\UI;
+
+use \Tsugi\Util\U;
+
 /**
  * This is a class that supports the creation of simple CRUD forms.
  *
@@ -49,8 +52,9 @@ class CrudForm {
      *
      * @param $fields An array of fields to prompt for.
      * @param $from_location A URL to jump to when the user presses 'Cancel'.
+     * @param $titles An array of fields->titles
      */
-    public static function insertForm($fields, $from_location) {
+    public static function insertForm($fields, $from_location, $titles=false) {
         echo('<form method="post">'."\n");
 
         for($i=0; $i < count($fields); $i++ ) {
@@ -61,10 +65,10 @@ class CrudForm {
             if ( strpos($field, "_sha256") > 0 ) continue;
 
             echo('<div class="form-group">'."\n");
-            echo('<label for="'.$field.'">'.self::fieldToTitle($field)."<br/>\n");
+            echo('<label for="'.$field.'">'.self::fieldToTitle($field, $titles)."<br/>\n");
 
             if ( strpos($field, "secret") !== false ) {
-                echo('<input id="'.$field.'" type="password" size="80" name="'.$field.'"');
+                echo('<input id="'.$field.'" type="password" autocomplete="off" size="80" name="'.$field.'"');
                 echo("onclick=\"if ( $(this).attr('type') == 'text' ) $(this).attr('type','password'); else $(this).attr('type','text'); return false;\">\n");
             } else {
                 echo('<input type="text" size="80" id="'.$field.'" name="'.$field.'">'."\n");
@@ -109,7 +113,9 @@ class CrudForm {
                 }
 
                 $key = $field;
-                if ( strpos($field, "_sha256") !== false ) {
+
+                // Set the sha256 value if it is not there
+                if ( strpos($field, "_sha256") !== false && ! isset($_POST[$field])) {
                     $key = str_replace("_sha256", "_key", $field);
                     if ( ! isset($_POST[$key]) ) {
                         $_SESSION['success'] = "Missing POST field: ".$key;
@@ -152,9 +158,10 @@ class CrudForm {
      * @param $allow_edit True/false as to whether to show an Edit button
      * @param $allow_delete True/false as to whether to show a Delete button
      * @param $extra_buttons An array of additional buttons to show
+     * @param $titles An array of fields->titles
      */
     public static function updateForm($row, $fields, $current, $from_location,
-        $allow_edit=false, $allow_delete=false, $extra_buttons=false)
+        $allow_edit=false, $allow_delete=false, $extra_buttons=false, $titles=false)
     {
         $key = $fields['0'];
         if ( !isset($_REQUEST[$key]) ) {
@@ -190,11 +197,12 @@ class CrudForm {
             $field = $fields[$i];
             $value = $row[$field];
             if ( ! $do_edit ) {
-                echo('<p><strong>'.self::fieldToTitle($field)."</strong></p>\n");
-                if ( strpos($field, "secret") !== false ) {
-                    echo("<p onclick=\"$('#stars_{$i}').toggle();$('#text_{$i}').toggle();\">\n");
-                    echo("<span id=\"stars_{$i}\">***********</span>\n");
+                echo('<p><strong>'.self::fieldToTitle($field, $titles)."</strong></p>\n");
+                if ( strpos($field, "secret") !== false || strpos($field, "privkey") !== false ) {
+                    echo("<p>\n");
                     echo("<span style=\"display: none;\" id=\"text_{$i}\">".htmlent_utf8($value).'</span>');
+                    echo("<span id=\"show_{$i}\" onclick=\"$('#text_{$i}').show();$('#show_{$i}').hide();$('#hide_{$i}').show();\";>(Click to show)</span>\n");
+                    echo("<span id=\"hide_{$i}\" onclick=\"$('#text_{$i}').hide();$('#hide_{$i}').hide();$('#show_{$i}').show();\" style=\"display:none\";>(Click to hide)</span>\n");
                     echo("\n</p>\n");
                 } else {
                     echo("<p>".htmlent_utf8($value)."</p>\n");
@@ -211,13 +219,13 @@ class CrudForm {
             if ( strpos($field, "_at") > 0 ) continue;
 
             echo('<div class="form-group">'."\n");
-            echo('<label for="'.$field.'">'.self::fieldToTitle($field)."<br/>\n");
+            echo('<label for="'.$field.'">'.self::fieldToTitle($field, $titles)."<br/>\n");
             if ( isset($_POST[$field]) ) {
                 $value = $_POST[$field];
             }
 
             if ( strpos($field, "secret") !== false ) {
-                echo('<input id="'.$field.'" type="password" size="80" name="'.$field.'" value="'.
+                echo('<input id="'.$field.'" type="password" autocomplete="off" size="80" name="'.$field.'" value="'.
                         htmlent_utf8($value).'"');
                 echo("onclick=\"if ( $(this).attr('type') == 'text' ) $(this).attr('type','password'); else $(this).attr('type','text'); return false;\">\n");
             } else if ( strlen($value) > 60 ) {
@@ -326,6 +334,17 @@ class CrudForm {
                     $set .= $field."= NOW()";
                     continue;
                 }
+
+                // Update the sha256 value if we have a corresponding _key value
+                if ( strpos($field, "_sha256") !== false && ! isset($_POST[$field])) {
+                    $key = str_replace("_sha256", "_key", $field);
+                    if ( ! isset($_POST[$key]) ) continue;
+                    $value = lti_sha256($_POST[$key]);
+                    $set .= $field."= :".$i;
+                    $parms[':'.$i] = $value;
+                    continue;
+                }
+
                 if ( !isset($_POST[$field]) ) {
                     $_SESSION['error'] = _m("Missing POST field: ").$field;
                     return self::CRUD_FAIL;
@@ -346,7 +365,8 @@ class CrudForm {
      *
      * @todo Make this translatable and pretty
      */
-    public static function fieldToTitle($name) {
+    public static function fieldToTitle($name, $titles=false) {
+        if ( is_array($titles) && U::get($titles, $name) ) return U::get($titles, $name);
         return ucwords(str_replace('_',' ',$name));
     }
 

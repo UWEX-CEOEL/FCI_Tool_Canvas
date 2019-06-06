@@ -2,6 +2,7 @@
 
 use \Tsugi\Core\LTIX;
 use \Tsugi\Util\Git;
+use \Tsugi\UI\HandleBars;
 
 if (!defined('COOKIE_SESSION')) define('COOKIE_SESSION', true);
 require_once("../../config.php");
@@ -28,12 +29,16 @@ $OUTPUT->topNav();
 $OUTPUT->flashMessages();
 
 require_once("../sanity-db.php");
+require_once("install_util.php");
 
 if ( ! isset($CFG->install_folder) ) {
     echo('<h1>Install folder ($CFG->install_folder) is not configured</h1>'."\n");
     $OUTPUT->footer();
     return;
 }
+
+// Check to see if we are in a cluster
+$other_nodes = count(getClusterIPs());
 
 ?>
 <div id="readonly-dialog" title="Read Only Dialog" style="display: none;">
@@ -51,18 +56,27 @@ the <b>config-dist.php</b> file.
 </div>
 <p>This screen is a wrapper for the <b>git</b> command if it is installed in your system.
 This screen runs <b>git</b> commands on your behalf.
-It will only handle the normal operations and assuming that they work.  If you log in
+It will only handle the normal operations and assume that they work.  If you log in
 and edit the files after they are checked out, this tool might not be able to upgrade
 some of these git repos.
 </p>
+<?php if($other_nodes > 0 ) { ?>
+<p><b>Note:</b> This is a clustered environment with <?= $other_nodes+1 ?> nodes,
+it may take some time before installations / updates propagate to all
+the nodes in the cluster.  It can take up to an hour to clear out cluster nodes
+that have left the cluster.  Please be  patient.</p>
+<?php } ?>
 <p>Using: <?= htmlentities($git_version) ?></p>
 <ul class="nav nav-tabs">
   <li class="active"><a href="#home" data-toggle="tab" aria-expanded="true">Installed Modules</a></li>
-<?php if(isset($CFG->lessons)) { ?>
-  <li class=""><a href="#required" data-toggle="tab" aria-expanded="false">Required Modules</a></li>
+<?php if($other_nodes > 0 ) { ?>
+  <li class=""><a href="#cluster-div" data-toggle="tab" aria-expanded="false">Cluster Status</a></li>
 <?php } ?>
-  <li class=""><a href="#available" data-toggle="tab" aria-expanded="false">Available Modules</a></li>
-  <li class=""><a href="#advanced" data-toggle="tab" aria-expanded="false">Advanced</a></li>
+<?php if(isset($CFG->lessons)) { ?>
+  <li class=""><a href="#required-div" data-toggle="tab" aria-expanded="false">Required Modules</a></li>
+<?php } ?>
+  <li class=""><a href="#available-div" data-toggle="tab" aria-expanded="false">Available Modules</a></li>
+  <li class=""><a href="#advanced-div" data-toggle="tab" aria-expanded="false">Advanced</a></li>
 </ul>
 <div id="myTabContent" class="tab-content" style="margin-top:10px;">
   <div class="tab-pane fade active in" id="home">
@@ -70,19 +84,26 @@ some of these git repos.
     <img src="<?= $OUTPUT->getSpinnerUrl() ?>" id="spinner">
     </ul>
   </div>
+<?php if($other_nodes > 0 ) { ?>
+  <div class="tab-pane fade" id="cluster-div">
+    <ul id="cluster_ul">
+    <img src="<?= $OUTPUT->getSpinnerUrl() ?>" id="spinner">
+    </ul>
+  </div>
+<?php } ?>
 <?php if(isset($CFG->lessons)) { ?>
-  <div class="tab-pane fade" id="required">
+  <div class="tab-pane fade" id="required-div">
     <ul id="required_ul">
     <img src="<?= $OUTPUT->getSpinnerUrl() ?>" id="spinner">
     </ul>
   </div>
 <?php } ?>
-  <div class="tab-pane fade" id="available">
+  <div class="tab-pane fade" id="available-div">
     <ul id="available_ul">
     <img src="<?= $OUTPUT->getSpinnerUrl() ?>" id="spinner">
     </ul>
   </div>
-  <div class="tab-pane fade" id="advanced">
+  <div class="tab-pane fade" id="advanced-div">
     <p>This screen allows you to clone a repository into your <b>install_folder</b>.
     Make sure to know the code you are installing and review it carefully before
     installing it. The repository will be checked out into a folder of the
@@ -104,9 +125,12 @@ some of these git repos.
 
 
 $OUTPUT->footerStart();
-$OUTPUT->templateInclude(array('installed', 'available'));
+HandleBars::templateInclude(array('installed', 'available'));
+if( $other_nodes > 0 ) {
+    HandleBars::templateInclude('cluster');
+}
 if(isset($CFG->lessons)) {
-    $OUTPUT->templateInclude('required');
+    HandleBars::templateInclude('required');
 }
 ?>
 <script>
@@ -119,6 +143,12 @@ $(document).ready(function(){
 <?php } ?>
         tsugiHandlebarsToDiv('available_ul', 'available', repos);
     }).fail( function() { alert('getJSON fail'); } );
+
+<?php if( $other_nodes > 0 ) { ?>
+    $.getJSON('<?= addSession('cluster_json.php') ?>', function(data) {
+        tsugiHandlebarsToDiv('cluster_ul', 'cluster', data);
+    }).fail( function() { alert('getJSON fail'); } );
+<?php } ?>
 });
 
 </script>

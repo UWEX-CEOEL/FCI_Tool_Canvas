@@ -2,6 +2,7 @@
 
 namespace Tsugi\UI;
 
+use \Tsugi\Util\U;
 use \Tsugi\Util\LTI;
 use \Tsugi\Core\LTIX;
 use \Tsugi\Crypt\AesCtr;
@@ -35,39 +36,6 @@ class Lessons {
     public $resource_links;
 
     /**
-     * User REST-style URLS
-     */
-    public $use_rest_urls = false;
-
-    /**
-     * Handle the legacy and REST-Style URLs.
-     *
-     * This is not elegant but gets some experience.
-     */
-    public function makeLink($anchor=null, $index=null){
-        global $CFG;
-        if ( $this->use_rest_urls ) {
-            // Links are relative to the current document
-            if ( $this->isSingle() ) {
-                if ( $anchor != null ) return urlencode($anchor);
-                if ( $index != null ) return urlencode($index);
-                return '.';
-            } else {
-                $url = $_SERVER['REQUEST_URI'];
-                if ( ! endsWith($url,'/') ) $url .= '/';
-                if ( $anchor != null ) return $url . urlencode($anchor);
-                if ( $index != null ) return $url . urlencode($index);
-                return $url;
-            }
-        } else {
-            $url = $CFG->apphome . '/lessons';
-            if ( $anchor != null ) return $url . '?anchor=' . urlencode($anchor);
-            if ( $index != null ) return $url . '?index=' . urlencode($index);
-            return $url;
-        }
-    }
-
-    /**
      * emit the header material
      */
     public static function header($buffer=false) {
@@ -76,11 +44,19 @@ class Lessons {
 ?>
 <style>
     .card {
-        border: 1px solid black;
-        margin: 5px;
-        padding: 5px;
-        min-height: 8em;
-    }
+    display: inline-block;
+    padding: 0.5em;
+    margin: 12px;
+    border: 1px solid black;
+    height: 9em;
+    overflow-y: hidden;
+}
+ .card div {
+    height: 8em;
+    overflow-y: hidden;
+    text-overflow: ellipsis;
+}
+
 #loader {
       position: fixed;
       left: 0px;
@@ -163,13 +139,13 @@ class Lessons {
 
             // Non arrays
             if ( isset($this->lessons->modules[$i]->slides) ) {
-                self::makeAbsolute($this->lessons->modules[$i]->slides);
+                U::absolute_url_ref($this->lessons->modules[$i]->slides);
             }
             if ( isset($this->lessons->modules[$i]->assignment) ) {
-                self::makeAbsolute($this->lessons->modules[$i]->assignment);
+                U::absolute_url_ref($this->lessons->modules[$i]->assignment);
             }
             if ( isset($this->lessons->modules[$i]->solution) ) {
-                self::makeAbsolute($this->lessons->modules[$i]->solution);
+                U::absolute_url_ref($this->lessons->modules[$i]->solution);
             }
         }
 
@@ -222,21 +198,6 @@ class Lessons {
     }
 
     /**
-     * Make a path absolute
-     */
-    public static function makeAbsolute(&$path) {
-        global $CFG;
-        if ( strpos($path,'http://') === 0 ) {
-            return;
-        } else if ( strpos($path,'https://') === 0 ) {
-            return;
-        } else {
-            if ( strpos('/', $path) !== 0 ) $path = '/' . $path;
-            $path =$CFG->apphome . $path;
-        }
-    }
-
-    /**
      * Make non-array into an array and adjust paths
      */
     public static function adjustArray(&$entry) {
@@ -245,9 +206,9 @@ class Lessons {
             $entry = array($entry);
         }
         for($i=0; $i < count($entry); $i++ ) {
-            if ( is_string($entry[$i]) ) self::makeAbsolute($entry[$i]);
-            if ( isset($entry[$i]->href) && is_string($entry[$i]->href) ) self::makeAbsolute($entry[$i]->href);
-            if ( isset($entry[$i]->launch) && is_string($entry[$i]->launch) ) self::makeAbsolute($entry[$i]->launch);
+            if ( is_string($entry[$i]) ) U::absolute_url_ref($entry[$i]);
+            if ( isset($entry[$i]->href) && is_string($entry[$i]->href) ) U::absolute_url_ref($entry[$i]->href);
+            if ( isset($entry[$i]->launch) && is_string($entry[$i]->launch) ) U::absolute_url_ref($entry[$i]->launch);
         }
     }
 
@@ -309,49 +270,79 @@ class Lessons {
     }
 
     /*
+     * A Nostyle URL Link with title
+     */
+    public static function nostyleUrl($title, $url) {
+        echo('<a href="'.$url.'" target="_blank" typeof="oer:SupportingMaterial">'.htmlentities($url)."</a>\n");
+        if ( isset($_SESSION['gc_count']) ) {
+            echo('<div class="g-sharetoclassroom" data-size="16" data-url="'.$url.'" ');
+	    echo(' data-title="'.htmlentities($title).'" ');
+	    echo('></div>');
+        }
+    }
+
+    /*
      * render a lesson
      */
     public function renderSingle($buffer=false) {
         global $CFG, $OUTPUT;
         ob_start();
+        if ( isset($_GET['nostyle']) ) {
+            if ( $_GET['nostyle'] == 'yes' ) {
+                $_SESSION['nostyle'] = 'yes';
+            } else {
+                unset($_SESSION['nostyle']);
+            }
+        }
+        $nostyle = isset($_SESSION['nostyle']);
+
         $module = $this->module;
+
+	if ( $nostyle && isset($_SESSION['gc_count']) ) {
+?>
+<script src="https://apis.google.com/js/platform.js" async defer></script>
+<div id="iframe-dialog" title="Read Only Dialog" style="display: none;">
+   <iframe name="iframe-frame" style="height:200px" id="iframe-frame"
+    src="<?= $OUTPUT->getSpinnerUrl() ?>"></iframe>
+</div>
+<?php
+        }
             echo('<div typeof="oer:Lesson" style="float:right; padding-left: 5px; vertical-align: text-top;"><ul class="pager">'."\n");
             $disabled = ($this->position == 1) ? ' disabled' : '';
+            $all = U::get_rest_parent();
             if ( $this->position == 1 ) {
                 echo('<li class="previous disabled"><a href="#" onclick="return false;">&larr; Previous</a></li>'."\n");
             } else {
-                $prev = $this->makeLink(null, $this->position-1);
-                if ( isset($this->lessons->modules[$this->position-2]->anchor) ) {
-                    $prev = $this->makeLink($this->lessons->modules[$this->position-2]->anchor);
-                }
+                $prev = $all . '/' . urlencode($this->lessons->modules[$this->position-2]->anchor);
                 echo('<li class="previous"><a href="'.$prev.'">&larr; Previous</a></li>'."\n");
             }
-            $all = $this->makeLink();
             echo('<li><a href="'.$all.'">All ('.$this->position.' / '.count($this->lessons->modules).')</a></li>');
             if ( $this->position >= count($this->lessons->modules) ) {
                 echo('<li class="next disabled"><a href="#" onclick="return false;">&rarr; Next</a></li>'."\n");
             } else {
-                $next = $this->makeLink(null, $this->position+1);
-                if ( isset($this->lessons->modules[$this->position]->anchor) ) {
-                    $next = $this->makeLink($this->lessons->modules[$this->position]->anchor);
-                }
+                $next = $all . '/' . urlencode($this->lessons->modules[$this->position]->anchor);
                 echo('<li class="next"><a href="'.$next.'">&rarr; Next</a></li>'."\n");
             }
             echo("</ul></div>\n");
             echo('<h1 property="oer:name">'.$module->title."</h1>\n");
+            $lessonurl = $CFG->apphome . U::get_rest_path();
+            if ( $nostyle ) {
+                self::nostyleUrl($module->title, $lessonurl);
+                echo("<hr/>\n");
+            }
 
             if ( isset($module->videos) ) {
                 $videos = $module->videos;
-                echo('<ul class="bxslider">'."\n");
+                echo($nostyle ? 'Videos: <ul>' : '<ul class="bxslider">'."\n");
                 foreach($videos as $video ) {
                     echo('<li>');
-                    $OUTPUT->embedYouTube($video->youtube, $video->title);
-/*
-                    echo('<div class="youtube-player" data-id="'.$video->youtube.'"></div>');
-                    echo('<iframe src="https://www.youtube.com/embed/'.
-                        $video->youtube.'" frameborder="0" webkitAllowFullScreen mozallowfullscreen allowfullscreen '.
-                        ' alt="'.htmlentities($video->title).'"></iframe>'."\n");
-*/
+                    if ( $nostyle ) {
+                        echo(htmlentities($video->title)."<br/>");
+                        $yurl = 'https://www.youtube.com/watch?v='.$video->youtube;
+                        self::nostyleUrl($video->title, $yurl);
+                    } else {
+                        $OUTPUT->embedYouTube($video->youtube, $video->title);
+                    }
                     echo('</li>');
                 }
                 echo("</ul>\n");
@@ -363,29 +354,52 @@ class Lessons {
 
             echo("<ul>\n");
             if ( isset($module->slides) ) {
-                echo('<li><a href="'.$module->slides.'" typeof="oer:SupportingMaterial" target="_blank">Slides</a></li>'."\n");
+                if ( $nostyle ) {
+                    echo('<li>Slides: ');
+                    self::nostyleUrl(__('Slides'), $module->slides);
+                    echo('</li>'."\n");
+                } else {
+                    echo('<li><a href="'.$module->slides.'" typeof="oer:SupportingMaterial" target="_blank">Slides</a></li>'."\n");
+                }
             }
             if ( isset($module->chapters) ) {
                 echo('<li typeof="SupportingMaterial">Chapters: '.$module->chapters.'</a></li>'."\n");
             }
             if ( isset($module->assignment) ) {
-                echo('<li typeof="oer:assessment"><a href="'.$module->assignment.'" target="_blank">Assignment Specification</a></li>'."\n");
+                if ( $nostyle ) {
+                    echo('<li typeof="oer:assessment">Assignment Specification:');
+                    self::nostyleUrl(__('Assignment Specification'), $module->assignment);
+                    echo('</li>'."\n");
+                } else {
+                    echo('<li typeof="oer:assessment"><a href="'.$module->assignment.'" target="_blank">Assignment Specification</a></li>'."\n");
+                }
             }
             if ( isset($module->solution) ) {
-                echo('<li typeof="oer:assessment"><a href="'.$module->solution.'" target="_blank">Assignment Solution</a></li>'."\n");
+                if ( $nostyle ) {
+                    echo('<li typeof="oer:assessment">Assignment Solution:');
+                    self::nostyleUrl(__('Assignment Solution'), $module->solution);
+                    echo('</li>'."\n");
+                } else {
+                    echo('<li typeof="oer:assessment"><a href="'.$module->solution.'" target="_blank">Assignment Solution</a></li>'."\n");
+                }
             }
             if ( isset($module->references) ) {
                 if ( count($module->references) > 0 ) {
                     echo('<li typeof="oer:SupportingMaterial">References:<ul>'."\n");
-                    foreach($module->references as $reference ) {
+                }
+                foreach($module->references as $reference ) {
+                    if ( $nostyle ) {
+                        echo('<li typeof="oer:SupportingMaterial">');
+                        echo(htmlentities($reference->title).' ');
+                        self::nostyleUrl($reference->title, $reference->href);
+                        echo('</li>'."\n");
+                    } else {
                         echo('<li typeof="oer:SupportingMaterial"><a href="'.$reference->href.'" target="_blank">'.
                             $reference->title."</a></li>\n");
                     }
+                }
+                if ( count($module->references) > 0 ) {
                     echo("</ul></li>\n");
-                } else {
-                    echo('<li>Reference: <a href="'.
-                        $module->references->href.'" target="_blank">'.
-                        $module->references->title."</a></li>\n");
                 }
             }
 
@@ -394,95 +408,61 @@ class Lessons {
                 $ltis = $module->lti;
                 if ( count($ltis) > 1 ) echo('<li typeof="oer:assessment">Tools:<ul> <!-- start of ltis -->'."\n");
                 foreach($ltis as $lti ) {
-                    $title = isset($lti->title) ? $lti->title : $module->title;
-                    echo('<li typeof="oer:assessment">'.htmlentities($title).' (Login Required)</li>'."\n");
+                    $resource_link_title = isset($lti->title) ? $lti->title : $module->title;
+                    if ( $nostyle ) {
+                        echo('<li typeof="oer:assessment">'.htmlentities($resource_link_title).' (LTI Required) <br/>'."\n");
+                        $ltiurl = U::add_url_parm($lti->launch, 'inherit', $lti->resource_link_id);
+                        echo('<span style="color:green">'.htmlentities($ltiurl)."</span>\n");
+                        echo("\n</li>\n");
+                        continue;
+                    }
+                    echo('<li typeof="oer:assessment">'.htmlentities($resource_link_title).' (Login Required)</li>'."\n");
                 }
                 if ( count($ltis) > 1 ) echo("</li></ul><!-- end of ltis -->\n");
             }
 
-            // LTIs not logged in
-            if ( isset($module->lti) && isset($_SESSION['secret']) ) {
+            // LTIs logged in
+            if ( isset($module->lti) && U::get($_SESSION,'secret') && U::get($_SESSION,'context_key')
+                && U::get($_SESSION,'user_key') && U::get($_SESSION,'displayname') && U::get($_SESSION,'email') )
+            {
                 $ltis = $module->lti;
 
                 if ( count($ltis) > 1 ) echo("<li>Tools:<ul> <!-- start of ltis -->\n");
                 $count = 0;
                 foreach($ltis as $lti ) {
-                    $key = isset($_SESSION['oauth_consumer_key']) ? $_SESSION['oauth_consumer_key'] : false;
-                    $secret = false;
-                    if ( isset($_SESSION['secret']) ) {
-                        $secret = LTIX::decrypt_secret($_SESSION['secret']);
-                    }
-
-                    if ( isset($lti->resource_link_id) ) {
-                        $resource_link_id = $lti->resource_link_id;
-                    } else {
-                        $resource_link_id = 'resource:';
-                        if ( $this->anchor != null ) $resource_link_id .= $this->anchor . ':';
-                        if ( $this->position != null ) $resource_link_id .= $this->position . ':';
-                        if ( $count > 0 ) {
-                            $resource_link_id .= '_' . $count;
-                        }
-                        $resource_link_id .= md5($CFG->context_title);
-                    }
-                    $count++;
                     $resource_link_title = isset($lti->title) ? $lti->title : $module->title;
-                    $parms = array(
-                        'lti_message_type' => 'basic-lti-launch-request',
-                        'resource_link_id' => $resource_link_id,
-                        'resource_link_title' => $resource_link_title,
-                        'tool_consumer_info_product_family_code' => 'tsugi',
-                        'tool_consumer_info_version' => '1.1',
-                        'context_id' => $_SESSION['context_key'],
-                        'context_label' => $CFG->context_title,
-                        'context_title' => $CFG->context_title,
-                        'user_id' => $_SESSION['user_key'],
-                        'lis_person_name_full' => $_SESSION['displayname'],
-                        'lis_person_contact_email_primary' => $_SESSION['email'],
-                        'roles' => 'Learner'
-                    );
-                    if ( isset($_SESSION['avatar']) ) $parms['user_image'] = $_SESSION['avatar'];
-
-                    if ( isset($lti->custom) ) {
-                        foreach($lti->custom as $custom) {
-                            if ( isset($custom->value) ) {
-                                $parms['custom_'.$custom->key] = $custom->value;
-                            }
-                            if ( isset($custom->json) ) {
-                                $parms['custom_'.$custom->key] = json_encode($custom->json);
-                            }
+                    if ( $nostyle ) {
+                        echo('<li typeof="oer:assessment">'.htmlentities($resource_link_title).' (LTI Required) <br/>'."\n");
+                        $ltiurl = U::add_url_parm($lti->launch, 'inherit', $lti->resource_link_id);
+                        echo('<span style="color:green">'.htmlentities($ltiurl)."</span>\n");
+                        if ( isset($_SESSION['gc_count']) ) {
+                            echo('<a href="'.$CFG->wwwroot.'/gclass/assign?rlid='.$lti->resource_link_id);
+                            echo('" title="Install Assignment in Classroom" target="iframe-frame"'."\n");
+                            echo("onclick=\"showModalIframe(this.title, 'iframe-dialog', 'iframe-frame', _TSUGI.spinnerUrl, true);\" >\n");
+                            echo('<img height=16 width=16 src="https://www.gstatic.com/classroom/logo_square_48.svg"></a>'."\n");
                         }
+                        echo("\n</li>\n");
+                        continue;
                     }
 
-/*
-                    $return_url = $CFG->getCurrentUrl();
-                    if ( $this->anchor ) $return_url .= '?anchor='.urlencode($this->anchor);
-                    elseif ( $this->position ) $return_url .= '?index='.urlencode($this->position);
-*/
-                    $return_url = $_SERVER['REQUEST_URI'];
-                    $parms['launch_presentation_return_url'] = $return_url;
-
-                    $sess_key = 'tsugi_top_nav_'.$CFG->wwwroot;
-                    if ( isset($_SESSION[$sess_key]) ) {
-                        // $parms['ext_tsugi_top_nav'] = $_SESSION[$sess_key];
-                    }
-
-                    $form_id = "tsugi_form_id_".bin2Hex(openssl_random_pseudo_bytes(4));
-                    $parms['ext_lti_form_id'] = $form_id;
-
-                    $endpoint = $lti->launch;
-                    $parms = LTI::signParameters($parms, $endpoint, "POST", $key, $secret,
-                        "Finish Launch", $CFG->product_instance_guid, $CFG->servicename);
-
-                    $content = LTI::postLaunchHTML($parms, $endpoint, false /*debug */, '_pause');
+                    $rest_path = U::rest_path();
+                    $launch_path = $rest_path->parent . '/' . $rest_path->controller . '_launch/' . $lti->resource_link_id;
                     $title = isset($lti->title) ? $lti->title : "Autograder";
-                    echo('<li><a href="#" onclick="document.'.$form_id.'.submit();return false">'.htmlentities($title).'</a></li>'."\n");
-                    echo("<!-- Start of content -->\n");
-                    print($content);
-                    echo("<!-- End of content -->\n");
+                    echo('<li><a href="'.$launch_path.'">'.htmlentities($title).'</a></li>'."\n");
                 }
 
                 if ( count($ltis) > 1 ) echo("</li></ul><!-- end of ltis -->\n");
             }
+
+        echo("</ul>\n");
+
+        if ( $nostyle ) {
+            $styleoff = U::get_rest_path() . '?nostyle=no';
+            echo('<p><a href="'.$styleoff.'">');
+            echo(__('Turn styling back on'));
+            echo("</a>\n");
+        }
+
         if ( !isset($module->discuss) ) $module->discuss = true;
         if ( !isset($module->anchor) ) $module->anchor = $this->position;
         // For now do not add disqus to each page.
@@ -526,19 +506,19 @@ var disqus_config = function () {
         foreach($this->lessons->modules as $module) {
 	    if ( isset($module->login) && $module->login && !isset($_SESSION['id']) ) continue;
             $count++;
-            echo('<div class="card">'."\n");
-            $href = $this->makeLink($module->anchor);
+            echo('<div class="card"><div>'."\n");
+            $href = U::get_rest_path() . '/' . urlencode($module->anchor);
             if ( isset($module->icon) ) {
                 echo('<i class="fa '.$module->icon.' fa-2x" aria-hidden="true" style="float: left; padding-right: 5px;"></i>');
             }
             echo('<a href="'.$href.'">'."\n");
-            echo('<p>'.$count.': '.$module->title."</p>\n");
+            echo($count.': '.$module->title."<br clear=\"all\"/>\n");
             if ( isset($module->description) ) {
                 $desc = $module->description;
-                if ( strlen($desc) > 100 ) $desc = substr($desc, 0, 100) . " ...";
-                echo('<p>'.$desc."</p>\n");
+                if ( strlen($desc) > 1000 ) $desc = substr($desc, 0, 1000);
+                echo('<br/>'.$desc."\n");
             }
-            echo("</a></div>\n");
+            echo("</a></div></div>\n");
         }
         echo('</div> <!-- box -->'."\n");
         echo('</div> <!-- typeof="Course" -->'."\n");
@@ -558,7 +538,7 @@ var disqus_config = function () {
             $count++;
             if ( !isset($module->lti) ) continue;
             echo('<tr><td class="info" colspan="3">'."\n");
-            $href = $this->makeLink($module->anchor);
+            $href = U::get_rest_parent() . '/lessons/' . urlencode($module->anchor);
             echo('<a href="'.$href.'">'."\n");
             echo($module->title);
             echo("</td></tr>");
@@ -608,7 +588,7 @@ var disqus_config = function () {
         } else {
             $retval->icon = 'fa-external-link';
         }
-        $retval->thumbnail = $CFG->staticroot.'/font-awesome-4.4.0/png/'.str_replace('fa-','',$retval->icon).'.png';
+        $retval->thumbnail = $CFG->fontawesome.'/png/'.str_replace('fa-','',$retval->icon).'.png';
 
         if ( strpos($title,':') !== false ) {
             $retval->title = $title;
@@ -692,7 +672,12 @@ var disqus_config = function () {
                 $awarded[] = $badge;
             }
             echo('<tr><td class="info">');
-            echo('<i class="fa fa-certificate" aria-hidden="true" style="padding-right: 5px;"></i>');
+            if ( ! isset($CFG->badge_url) ) {
+                echo('<i class="fa fa-certificate" aria-hidden="true" style="padding-right: 5px;"></i>');
+            } else {
+                $image = $CFG->badge_url . '/' . $badge->image;
+                echo('<img src="'.$image.'" style="width: 4rem;"/> ');
+            }
             echo($badge->title);
             echo('</td><td class="info" style="width: 30%; min-width: 200px;">');
             echo('<div class="progress">');
@@ -712,7 +697,8 @@ var disqus_config = function () {
                 $lti = $this->getLtiByRlid($resource_link_id);
 
                 echo('<tr><td>');
-                $href = $this->makeLink($module->anchor);
+                $rest_path = U::rest_path();
+                $href = $rest_path->parent . '/lessons/' . urlencode($module->anchor);
 
                 echo('<a href="'.$href.'">');
                 echo('<i class="fa fa-square-o text-info" aria-hidden="true" style="label label-success; padding-right: 5px;"></i>');
@@ -730,22 +716,23 @@ var disqus_config = function () {
 ?>
   </div>
   <div class="tab-pane fade" id="profile">
+<p></p>
 <?php
     if ( count($awarded) < 1 ) {
         echo("<p>No badges have been awarded yet.</p>");
     } else if ( !isset($_SESSION['id']) || ! isset($_SESSION['context_id']) ) {
         echo("<p>You must be logged in to see your badges.</p>\n");
     } else {
-        echo("</ul>\n");
+        echo("<ul style=\"list-style: none;\">\n");
         foreach($awarded as $badge) {
-            echo("<li>");
+            echo("<li><p>");
             $code = basename($badge->image,'.png');
             $decrypted = $_SESSION['id'].':'.$code.':'.$_SESSION['context_id'];
             $encrypted = bin2hex(AesCtr::encrypt($decrypted, $CFG->badge_encrypt_password, 256));
             echo('<a href="'.$CFG->wwwroot.'/badges/images/'.$encrypted.'.png" target="_blank">');
             echo('<img src="'.$CFG->wwwroot.'/badges/images/'.$encrypted.'.png" width="90"></a>');
             echo($badge->title);
-            echo("</li>\n");
+            echo("</p></li>\n");
         }
         echo("</ul>\n");
 ?>
@@ -818,7 +805,7 @@ $(function(){
      * The solution is to add the resource link from the Lesson as a GET
      * parameter on the launchurl URL to be a fallback:
      *
-     * https://../mod/zap/index.php?inherit=assn03
+     * https://../mod/zap/?inherit=assn03
      *
      * Say the tool has custom key of "exercise" that it wants a default
      * for when the tool has not yet been configured.  First we check
