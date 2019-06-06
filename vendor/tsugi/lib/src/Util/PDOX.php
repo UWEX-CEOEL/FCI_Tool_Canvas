@@ -42,6 +42,11 @@ namespace Tsugi\Util;
 class PDOX extends \PDO {
 
     /**
+     * Threshold for logging slow queries - 0 means don't log
+     */
+    public $slow_query = 0;
+
+    /**
      * Prepare and execute an SQL query with lots of error checking.
      *
      * This routine will call prepare() and then execute() with the
@@ -106,6 +111,12 @@ class PDOX extends \PDO {
             die("\PDO::Statement should not have ellapsed_time member"); // with error_log
         }
         $q->ellapsed_time = microtime(true)-$start;
+        if ( $this->slow_query < 0 || ($this->slow_query > 0 && $q->ellapsed_time > $this->slow_query ) ) {
+            $dbt = U::getCaller(2);
+            $caller_uri = U::get($_SERVER,'REQUEST_URI');
+            error_log("PDOX Slow Query:".$q->ellapsed_time.' '.$caller_uri.' '.$dbt);
+        }
+
         // In case we build this...
         if ( !isset($q->errorCode) ) $q->errorCode = '42000';
         if ( !isset($q->errorInfo) ) $q->errorInfo = Array('42000', '42000', $message);
@@ -194,6 +205,120 @@ class PDOX extends \PDO {
         } else {
             return false;
         }
+    }
+
+    /**
+     * Retrieve the metadata for a table.
+     */
+    function describe($tablename) {
+        $sql = "DESCRIBE ".$tablename;
+        $q = self::queryReturnError($sql);
+        if ( $q->success ) {
+            return $q->fetchAll();
+        } else {
+            return false;
+        }
+    }
+
+    /**
+     * Retrieve the metadata for a column in a table.
+     *
+     * For the output format for MySQL, see:
+     * https://dev.mysql.com/doc/refman/5.7/en/explain.html
+     *
+     * @param $fieldname The name of the column
+     * @param $source Either an array of the column metadata or the name of the table
+     *
+     * @return mixed An array of the column metadata or null
+     */
+    function describeColumn($fieldname, $source) {
+        if ( ! is_array($source) ) {
+            if ( ! is_string($source) ) {
+                throw new \Exception('Source must be an array of metadata or a table name');
+            }
+            $source = self::describe($source);
+            if ( ! is_array($source) ) return null;
+        }
+        foreach( $source as $column ) {
+            $name = U::get($column, "Field");
+            if ( $fieldname == $name ) return $column;
+        }
+        return null;
+    }
+
+    /**
+     * Check if a column is null
+     *
+     * @param $fieldname The name of the column
+     * @param $source Either an array of the column metadata or the name of the table
+     *
+     * @return mixed Returns true / false if the columns exists and null if the column does not exist.
+     */
+    function columnIsNull($fieldname, $source)
+    {
+        $column = self::describeColumn($fieldname, $source);
+        if ( ! $column ) throw new \Exception("Could not find $fieldname");
+        return U::get($column, "Null") == "YES";
+    }
+
+    /**
+     * Check if a column exists
+     *
+     * @param $fieldname The name of the column
+     * @param $source Either an array of the column metadata or the name of the table
+     *
+     * @return boolean Returns true/false
+     */
+    function columnExists($fieldname, $source)
+    {
+        if ( is_string($source) ) {  // Demand table exists
+            $source = self::describe($source);
+            if ( ! $source ) throw new \Exception("Could not find $source");
+        }
+        $column = self::describeColumn($fieldname, $source);
+        return is_array($column);
+    }
+
+    /**
+     * Get the column type
+     *
+     * @param $fieldname The name of the column
+     * @param $source Either an array of the column metadata or the name of the table
+     *
+     * @return mixed Returns a string if the columns exists and null if the column does not exist.
+     */
+    function columnType($fieldname, $source)
+    {
+        $column = self::describeColumn($fieldname, $source);
+        if ( ! $column ) throw new \Exception("Could not find $fieldname");
+        $type = U::get($column, "Type");
+        if ( ! $type ) return null;
+        if ( strpos($type, '(') === false ) return $type;
+        $matches = array();
+        preg_match('/([a-z]+)\([0-9]+\)/', $type, $matches);
+        if ( count($matches) == 2 ) return $matches[1];
+        return null;
+    }
+
+    /**
+     * Get the column length
+     *
+     * @param $fieldname The name of the column
+     * @param $source Either an array of the column metadata or the name of the table
+     *
+     * @return mixed Returns an integer has an explicit length, 0 if the column has no length and null if the column does not exist.
+     */
+    function columnLength($fieldname, $source)
+    {
+        $column = self::describeColumn($fieldname, $source);
+        if ( ! $column ) throw new \Exception("Could not find $fieldname");
+        $type = U::get($column, "Type");
+        if ( ! $type ) return null;
+        if ( strpos($type, '(') === false ) return 0;
+        $matches = array();
+        preg_match('/[a-z]+\(([0-9]+)\)/', $type, $matches);
+        if ( count($matches) == 2 ) return 0+$matches[1];
+        return 0;
     }
 
 }

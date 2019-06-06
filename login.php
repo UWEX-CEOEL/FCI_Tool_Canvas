@@ -1,10 +1,26 @@
 <?php
+use \Tsugi\Util\U;
 use \Tsugi\Util\Net;
 use \Tsugi\Core\LTIX;
 use \Tsugi\Crypt\SecureCookie;
 
 if ( ! defined('COOKIE_SESSION') ) define('COOKIE_SESSION', true);
 require_once "config.php";
+
+function login_redirect($path=false) {
+    global $CFG;
+    $login_return = U::get($_SESSION, 'login_return');
+    if ( $login_return ) {
+        unset($_SESSION['login_return']);
+        header('Location: '.$login_return);
+        return;
+    }
+    if ( isset($CFG->apphome) && $CFG->apphome ) {
+        header('Location: '.$CFG->apphome.'/'.$path);
+        return;
+    }
+    header('Location: '.$CFG->wwwroot.'/'.$path);
+}
 
 $PDOX = LTIX::getConnection();
 
@@ -77,6 +93,14 @@ if ( $CFG->DEVELOPER && $CFG->OFFLINE ) {
     $doLogin = true;
 } else {
 
+    if ( ! isset($CFG->google_client_id) || ! $CFG->google_client_id ) {
+        echo("<p>"._m('You need to set $CFG->google_client_id in order to use Google\'s Login')."</p>\n");
+        if ( strpos($CFG->wwwroot, '//localhost') !== false ) {
+            echo("<p>"._m('There is no need to log in to do local adminstration or local development')."</p>\n");
+        }
+        die();
+    }
+
     if ( isset($_GET['code']) ) {
         if ( isset($_SESSION['GOOGLE_STATE']) && isset($_GET['state']) ) {
             if ( $_SESSION['GOOGLE_STATE'] != $_GET['state'] ) {
@@ -131,7 +155,7 @@ if ( $doLogin ) {
     if ( $firstName === false || $lastName === false || $userEmail === false ) {
         error_log('Google-Missing:'.$user_key.','.$firstName.','.$lastName.','.$userEmail);
         $_SESSION["error"] = "You do not have a first name, last name, and email in Google or you did not share it with us.";
-        header('Location: '.$CFG->apphome.'/');
+        login_redirect();
         return;
     } else {
 
@@ -193,10 +217,10 @@ if ( $doLogin ) {
         if ( $profile_row === false ) {
             $stmt = $PDOX->queryDie(
                 "INSERT INTO {$CFG->dbprefix}profile
-                (profile_sha256, profile_key, key_id, email, displayname, created_at, updated_at, login_at) ".
-                    "VALUES ( :SHA, :UKEY, :KEY, :EMAIL, :DN, NOW(), NOW(), NOW() )",
+                (profile_sha256, profile_key, key_id, email, displayname, image, created_at, updated_at, login_at) ".
+                    "VALUES ( :SHA, :UKEY, :KEY, :EMAIL, :DN, :IM, NOW(), NOW(), NOW() )",
                  array('SHA' => $userSHA, ':UKEY' => $user_key, ':KEY' => $google_key_id,
-                    ':EMAIL' => $userEmail, ':DN' => $displayName)
+                    ':EMAIL' => $userEmail, ':DN' => $displayName, ':IM' => $userAvatar)
             );
 
             if ( $stmt->success) $profile_id = $PDOX->lastInsertId();
@@ -210,10 +234,10 @@ if ( $doLogin ) {
             }
             $stmt = $PDOX->queryDie(
                 "UPDATE {$CFG->dbprefix}profile
-                SET email = :EMAIL, displayname = :DN, login_at = NOW()
+                SET email = :EMAIL, displayname = :DN, image = :IM, login_at = NOW()
                 WHERE profile_id = :PRID",
                  array('PRID' => $profile_id,
-                    ':EMAIL' => $userEmail, ':DN' => $displayName)
+                    ':EMAIL' => $userEmail, ':DN' => $displayName, ':IM' => $userAvatar)
             );
         }
 
@@ -221,7 +245,7 @@ if ( $doLogin ) {
          if ( $profile_id < 1 ) {
             error_log('Fail-SQL-Profile:'.$user_key.','.$displayName.','.$userEmail.','.$stmt->errorImplode);
             $_SESSION["error"] = "Internal database error, sorry";
-            header('Location: '.$CFG->apphome.'/');
+            login_redirect();
             return;
          }
 
@@ -241,20 +265,21 @@ if ( $doLogin ) {
         if ( $user_id > 0 ) {
             $stmt = $PDOX->queryDie(
                 "UPDATE {$CFG->dbprefix}lti_user
-                 SET displayname=:DN, login_at=NOW(), ipaddr=:IP
+                 SET displayname=:DN, email=:EMAIL, image=:IM, login_at=NOW(), ipaddr=:IP
                  WHERE user_id=:ID",
                 array(':DN' => $displayName,':IP' => Net::getIP(), 
-                    ':ID' => $user_id)
+                    ':ID' => $user_id, ':IM' => $userAvatar, ':EMAIL' => $userEmail)
             );
+            error_log('User-Update:'.$user_key.','.$displayName.','.$userEmail);
         } else if ( $user_row === false ) { // Lets insert!
             $stmt = $PDOX->queryReturnError(
                 "INSERT INTO {$CFG->dbprefix}lti_user
                 (user_sha256, user_key, key_id, profile_id,
-                    email, displayname, created_at, updated_at, login_at, ipaddr) ".
-                "VALUES ( :SHA, :UKEY, :KEY, :PROF, :EMAIL, :DN, NOW(), NOW(), NOW(), :IP )",
+                    email, displayname, image, created_at, updated_at, login_at, ipaddr) ".
+                "VALUES ( :SHA, :UKEY, :KEY, :PROF, :EMAIL, :DN, :IM, NOW(), NOW(), NOW(), :IP )",
                  array('SHA' => $userSHA, ':UKEY' => $user_key, ':KEY' => $google_key_id,
                     ':PROF' => $profile_id, ':EMAIL' => $userEmail, ':DN' => $displayName,
-		    ':IP' => Net::getIP())
+                    ':IM' => $userAvatar, ':IP' => Net::getIP())
             );
 
             if ( $stmt->success ) {
@@ -266,19 +291,19 @@ if ( $doLogin ) {
             $user_id = $user_row['user_id']+0;
             $stmt = $PDOX->queryDie(
                 "UPDATE {$CFG->dbprefix}lti_user
-                 SET email=:EMAIL, displayname=:DN, profile_id = :PRID, login_at=NOW(), ipaddr=:IP
+                 SET email=:EMAIL, displayname=:DN, image=:IM, profile_id = :PRID, login_at=NOW(), ipaddr=:IP
                  WHERE user_id=:ID",
                 array(':EMAIL' => $userEmail, ':DN' => $displayName,':IP' => Net::getIP(), 
-                    ':ID' => $user_id, ':PRID' => $profile_id)
+                    ':ID' => $user_id, ':PRID' => $profile_id, ':IM' => $userAvatar)
             );
             error_log('User-Update:'.$user_key.','.$displayName.','.$userEmail);
         }
 
         if ( $user_id < 1 ) {
-             error_log('No User Entry:'.$user_key.','.$displayName.','.$userEmail);
-             $_SESSION["error"] = "Internal database error, sorry";
-             header('Location: '.$CFG->apphome.'/');
-             return;
+            error_log('No User Entry:'.$user_key.','.$displayName.','.$userEmail);
+            $_SESSION["error"] = "Internal database error, sorry";
+            login_redirect();
+            return;
         }
 
         // Add a membership record if needed
@@ -322,17 +347,18 @@ if ( $doLogin ) {
         $lti["user_key"] = $user_key;
 
         $_SESSION["email"] = $userEmail;
-        $lti["user_email"] = $userEmail;
+        $lti["email"] = $userEmail;
 
         $_SESSION["displayname"] = $displayName;
-        $lti["user_displayname"] = $displayName;
+        $lti["displayname"] = $displayName;
 
         $_SESSION["profile_id"] = $profile_id;
         $lti["profile_id"] = $profile_id;
 
         if ( isset($userAvatar) ) {
-            $_SESSION["avatar"] = $userAvatar;
-            $lti["user_image"] = $userAvatar;
+            $_SESSION["avatar"] = $userAvatar; // TODO: Remove
+            $_SESSION["image"] = $userAvatar;
+            $lti["image"] = $userAvatar;
         }
 
         if ( isset($CFG->context_title) ) {
@@ -352,16 +378,15 @@ if ( $doLogin ) {
         // Set that data in the session.
         $_SESSION['lti'] = $lti;
 
+        LTIX::noteLoggedIn($lti);
+
         // Set the secure cookie
         SecureCookie::set($user_id,$userEmail,$context_id);
 
-        if ( isset($_SESSION['login_return']) ) {
-            header('Location: '.$_SESSION['login_return']);
-            unset($_SESSION['login_return']);
-        } else if ( $didinsert ) {
-            header('Location: '.$CFG->wwwroot.'/profile');
+        if ( $didinsert ) {
+            login_redirect('profile');
         } else {
-            header('Location: '.$CFG->apphome.'/');
+            login_redirect();
         }
         return;
     }
@@ -396,8 +421,8 @@ We do not want to spend a lot of time verifying identity, resetting passwords,
 detecting robot-login storms, and other issues so we let Google do that hard work.
 </p>
 <form method="post">
-    <input class="btn btn-warning" type="button" onclick="location.href='<?php echo($login_return); ?>'; return false;" value="Cancel"/>
-    <input class="btn btn-primary" type="button" onclick="location.href='<?= $loginUrl ?>'; return false;" value="Login with Google" />
+    <a href="<?= $loginUrl ?>"><img src="<?= $CFG->staticroot ?>/img/google_signin_buttons/2x/btn_google_signin_dark_normal_web@2x.png" style="height: 3em;"></a>
+    <input class="btn btn-warning" type="button" onclick="location.href='<?php echo($login_return); ?>'; return false;" value="Cancel" style="height: 2.5em;"/>
 </form>
 <p>
 So you must have a Google account and we will require your

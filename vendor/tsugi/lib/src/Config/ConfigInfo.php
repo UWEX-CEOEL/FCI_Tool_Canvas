@@ -39,7 +39,7 @@ class ConfigInfo {
      *
      * This is not required, its default for this is $wwwroot.
      */
-    public $apphome;
+    public $apphome = null;
 
     /**
      * This is how the system will refer to itself.
@@ -97,8 +97,25 @@ class ConfigInfo {
      * Of course clever people would choose wiser passwords.
      */
     public $pdo       = 'mysql:host=127.0.0.1;dbname=tsugi';
+
+    /** 
+     * Database user for the PDO connection
+     */
     public $dbuser    = 'ltiuser';
+
+    /** 
+     * Database password for the PDO connection
+     */
     public $dbpass    = 'ltipassword';
+
+    /** 
+     * Additional parameter for the PDO constructor with an array of key-value options
+     *
+     * $CFG->pdo_options = array(\PDO::MYSQL_ATTR_SSL_CA => './BaltimoreCyberTrustRoot.crt.pem'))
+     *
+     * See also: https://www.php.net/manual/en/pdo.construct.php
+     */
+    public $pdo_options  = false;
 
     /** 
      * A prefix to prepend to all table names.
@@ -295,7 +312,7 @@ class ConfigInfo {
     /** 
      * Set the session timeout - in seconds
      */
-    public $sessionlifetime = 14400;
+    public $sessionlifetime = 3000;
 
     /** 
      * Set the nonce clearing factor
@@ -362,12 +379,7 @@ class ConfigInfo {
     public function __construct($dirroot, $wwwroot, $dataroot=false) {
         $this->dirroot = $dirroot;
         $this->wwwroot = $wwwroot;
-        $this->staticroot = 'https://www.dr-chuck.net/tsugi-static';
-        if ( $dataroot === false ) {
-            $this->dataroot = $dirroot . '/_files/a';
-        } else {
-            $this->dataroot = $dataroot;
-        }
+        $this->staticroot = 'https://static.tsugi.org';
     }
 
     function getCurrentFile($file) {
@@ -386,11 +398,13 @@ class ConfigInfo {
     function getScriptFolder() {
         $path = self::getScriptPathFull();
         if ( $path === false ) return false;
-        $pieces = explode(DIRECTORY_SEPARATOR, $path);
+        // Don't use DIRECTORY_SEPARATOR, PHP makes these forward slashes on Windows
+        $pieces = explode('/', $path);
         if ( count($pieces) < 1 ) return false;
         return $pieces[count($pieces)-1];
     }
 
+    // This should be deprecated since it only works under tsugi
     function getCurrentFileUrl($file) {
         return $this->wwwroot.$this->getCurrentFile($file);
     }
@@ -437,6 +451,8 @@ class ConfigInfo {
 
     /**
      * Get the name of the script relative to the server document root
+     *
+     * /py4e/mod/peer-grade/maint.php
      */
     public static function getScriptName() {
         if ( ! isset( $_SERVER['SCRIPT_NAME']) ) return false;
@@ -445,12 +461,18 @@ class ConfigInfo {
     }
 
     /**
-     * Get the current URL we are executing
+     * Get the current URL we are executing - no query parameters
+     *
+     * http://localhost:8888/py4e/mod/peer-grade/maint.php
      */
     public function getCurrentUrl() {
         $script = self::getScriptName();
         if ( $script === false ) return false; 
-        $pieces = parse_url($this->apphome);
+        $pieces = $this->apphome;
+        if ( $this->apphome ) {
+            $pieces = parse_url($this->apphome);
+        }
+        // We only take scheme, host, and port from wwwroot / apphome
         if ( ! isset($pieces['scheme']) ) return false;
         $retval = $pieces['scheme'].'://'.$pieces['host'];
         if ( isset($pieces['port']) ) $retval .= ':'.$pieces['port'];
@@ -458,28 +480,27 @@ class ConfigInfo {
     }
 
     /**
-     * Remove any relative elements from a path
+     * Get the current folder of the URL we are executing - no trailing slash
      *
-     * Before   After
-     * a/b/c    a/b/c
-     * a/b/c/   a/b/c/
-     * a/./c/   a/c/
-     * a/../c/  c/
+     * input: http://localhost:8888/py4e/mod/peer-grade/maint.php
+     * output: http://localhost:8888/py4e/mod/peer-grade
+     *
      */
-    public static function removeRelativePath($path) {
-        $pieces = explode('/', $path);
-        $new_pieces = array();
-        for($i=0; $i < count($pieces); $i++) {
-            if ($pieces[$i] == '.' ) continue;
-            if ( $i < count($pieces)-1 && $pieces[$i+1] == '..' ) {
-                $i++;
-                continue;
-            }
-            $new_pieces[] = $pieces[$i];
-        }
-        $retval = implode("/",$new_pieces);
+    public function getCurrentUrlFolder() {
+        $url = self::getCurrentUrl();
+        $pieces = explode('/', $url);
+        array_pop($pieces);
+        $retval = implode('/', $pieces);
         return $retval;
     }
 
+    /**
+     * Are we on localhost?
+     */
+    public function localhost() {
+        if ( strpos($this->wwwroot,'://localhost') !== false ) return true;
+        if ( strpos($this->wwwroot,'://127.0.0.1') !== false ) return true;
+        return false;
+    }
 }
 

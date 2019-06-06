@@ -23,6 +23,8 @@ namespace Tsugi\Util;
  */
 class Net {
 
+    public static $VERIFY_PEER = false;
+
     public static function getLastGETURL() {
         global $LastGETURL;
         return $LastGETURL;
@@ -59,6 +61,25 @@ class Net {
         global $LastBODYContent;
         return $LastBODYContent;
     }
+
+    public static function getLastBODYDebug() {
+        global $LastBODYContent;
+        global $LastBODYImpl;
+        global $LastBODYMethod;
+        global $LastBODYURL;
+        global $LastHeadersReceived;
+        global $LastHeadersSent;
+        global $last_http_response;
+
+        // Caller knows the body_sent
+        $retval = array();
+        $retval['code'] = $last_http_response;
+        $retval['body_impl'] = $LastBODYImpl;
+        $retval['headers_sent'] = $LastHeadersSent;
+        $retval['headers_received'] = $LastHeadersReceived;
+        return $retval;
+    }
+
 
     /**
      * Extract a set of header lines into an array
@@ -121,6 +142,7 @@ class Net {
         return $response;
     }
 
+    // Note - handles port numbers in URL automatically
     public static function getCurl($url, $header=false) {
       if ( ! function_exists('curl_init') ) return false;
       global $last_http_response;
@@ -144,8 +166,13 @@ class Net {
 
       // Thanks to more and more PHP's not shipping with CA's installed
       // This becomes necessary
-      curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-      curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+      if ( self::$VERIFY_PEER ) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+      } else {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+      }
 
       // Send to remote and return data to caller.
       $result = curl_exec($ch);
@@ -321,11 +348,15 @@ class Net {
         return $response;
     }
 
+    // Note - handles port numbers in URL automatically
     public static function bodyCurl($url, $method, $body, $header) {
       if ( ! function_exists('curl_init') ) return false;
       global $last_http_response;
       global $LastHeadersSent;
       global $LastHeadersReceived;
+      global $LastBODYImpl;
+      global $LastBODYMethod;
+      global $LastBODYContent;
 
       $ch = curl_init();
       curl_setopt($ch, CURLOPT_URL, $url);
@@ -352,8 +383,13 @@ class Net {
 
       // Thanks to more and more PHP's not shipping with CA's installed
       // This becomes necessary
-      curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
-      curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+      if ( static::$VERIFY_PEER ) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+      } else {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+      }
 
       // Send to remote and return data to caller.
       $result = curl_exec($ch);
@@ -368,6 +404,9 @@ class Net {
       $body = substr($result, $header_size);
       if ( $body === false ) $body = ''; // Handle empty body
       curl_close($ch);
+      $LastBODYContent = $body;
+      $LastBODYImpl = "CURL";
+      $LastBODYMethod = $method;
       return $body;
     }
 
@@ -376,6 +415,13 @@ class Net {
      */
     public static function send403() {
         header("HTTP/1.1 403 Forbidden");
+    }
+
+    /**
+     * Send a 400 (Malformed request) header
+     */
+    public static function send400($msg='Malformed request') {
+        header("HTTP/1.1 400 ".$msg);
     }
 
     /**
@@ -388,7 +434,7 @@ class Net {
      * Adapted from: https://www.chriswiegman.com/2014/05/getting-correct-ip-address-php/
      * With some additional explode goodness via: http://stackoverflow.com/a/25193833/1994792
      *
-     * @returns the IP address of the incoming request or NULL if it cannot be determined.
+     * @return string The IP address of the incoming request or NULL if it cannot be determined.
      */
     public static function getIP() {
 
@@ -399,41 +445,72 @@ class Net {
             $headers = $_SERVER;
         }
 
+        // $filter_option = FILTER_FLAG_IPV4;
+        // $filter_option = FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE;
+        $filter_option = 0;
+
         $the_ip = false;
 
-	// Check Cloudflare headers
+        // Check Cloudflare headers
         if ( $the_ip === false && array_key_exists( 'HTTP_CF_CONNECTING_IP', $headers ) ) {
             $pieces = explode(',',$headers['HTTP_CF_CONNECTING_IP']);
-            $the_ip = filter_var(end($pieces),FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
+            $the_ip = filter_var(current($pieces),FILTER_VALIDATE_IP, $filter_option );
         }
 
         if ( $the_ip === false && array_key_exists( 'CF-Connecting-IP', $headers ) ) {
             $pieces = explode(',',$headers['CF-Connecting-IP']);
-            $the_ip = filter_var(end($pieces),FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
+            $the_ip = filter_var(current($pieces),FILTER_VALIDATE_IP, $filter_option );
         }
 
         // Get the forwarded IP from more traditional places
         if ( $the_ip == false && array_key_exists( 'X-Forwarded-For', $headers ) ) {
             $pieces = explode(',',$headers['X-Forwarded-For']);
-            $the_ip = filter_var(end($pieces),FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
+            $the_ip = filter_var(current($pieces),FILTER_VALIDATE_IP, $filter_option );
         }
 
         if ( $the_ip === false && array_key_exists( 'HTTP_X_FORWARDED_FOR', $headers ) ) {
             $pieces = explode(',',$headers['HTTP_X_FORWARDED_FOR']);
-            $the_ip = filter_var(end($pieces),FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
+            $the_ip = filter_var(current($pieces),FILTER_VALIDATE_IP, $filter_option );
         }
 
         if ( $the_ip === false && array_key_exists( 'REMOTE_ADDR', $headers ) ) {
-            $the_ip = filter_var( $headers['REMOTE_ADDR'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
+            $the_ip = filter_var( $headers['REMOTE_ADDR'], FILTER_VALIDATE_IP, $filter_option );
         }
 
 	// Fall through and get *something*
         if ( $the_ip === false && array_key_exists( 'REMOTE_ADDR', $_SERVER ) ) {
-            $the_ip = filter_var( $_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
+            $the_ip = filter_var( $_SERVER['REMOTE_ADDR'], FILTER_VALIDATE_IP, $filter_option );
         }
 
         if ( $the_ip === false ) $the_ip = NULL;
         return $the_ip;
+    }
+
+    /**
+     * Return the IP Address of the current server
+     */
+    // https://stackoverflow.com/questions/3219178/php-how-to-get-local-ip-of-system
+    public static function serverIP() {
+        return getHostByName(getHostName());
+    }
+
+    /**
+     * Return true if we have a routable address
+     */
+    // https://stackoverflow.com/questions/13818064/check-if-an-ip-address-is-private
+    public static function isRoutable($ipaddr) {
+        return $ipaddr == filter_var(
+            $ipaddr,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE |  FILTER_FLAG_NO_RES_RANGE
+        );
+    }
+
+    /**
+     * Return true if the http code is 2xx (success)
+     */
+    public static function httpSuccess($httpcode) {
+        return ($httpcode >= 200) && ($httpcode < 300);
     }
 
 }

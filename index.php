@@ -1,6 +1,6 @@
 <?php
 
-use Tsugi\Core\LTIX;
+use \Tsugi\Core\LTIX;
 
 // In the top frame, we use cookies for session.
 if ( ! defined('COOKIE_SESSION') ) define('COOKIE_SESSION', true);

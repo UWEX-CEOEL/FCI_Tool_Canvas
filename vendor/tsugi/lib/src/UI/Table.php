@@ -200,7 +200,7 @@ class Table {
     onclick="document.getElementById('paged_search_box').value = '';"
     >
 
-    <?php
+<?php
     // Add the sort drop-down
     if ( isset($rows[0]) ) {
         $row = $rows[0];
@@ -259,16 +259,14 @@ class Table {
         }
     }
     ?>
-
-    </ul>
+    </form>
     <?php
     }
 
     public static function pagedTable($rows, $searchfields=array(), $orderfields=false, $view=false, $params=false, $extra_buttons=false) 
     {
         if ( $params == false ) $params = $_GET;
-        // Commenting out the header search and sort buttons.
-        //self::pagedHeader($rows, $searchfields, $orderfields, $view, $params, $extra_buttons);
+        self::pagedHeader($rows, $searchfields, $orderfields, $view, $params, $extra_buttons);
 
         $count = count($rows);
 
@@ -283,10 +281,7 @@ class Table {
         }
 
         if ( $count < 1 ) {
-            echo("
-            <p class='alert alert-danger'> No Record of Submissions in this Category </p>
-            ");
-            //echo("<p>Nothing to display.</p>\n");
+            echo("<p>Nothing to display.</p>\n");
             return;
         }
     // print_r($orderfields);
@@ -301,7 +296,12 @@ class Table {
 
         $first = true;
         $thispage = LTIX::curPageUrlNoQuery();
+
+	// Grab the last bit to make sure that session ID is added
+        $pieces = explode('/', $thispage);
+        if ( count($pieces) > 0 ) $thispage = $pieces[count($pieces)-1];
         if ( $view === false ) $view = $thispage;
+
         foreach ( $rows as $row ) {
             $count--;
             if ( $count < 0 ) break;
@@ -332,15 +332,12 @@ class Table {
                     }
                     $stuff = Table::doUrl($params,$override);
                     echo('<th class="'.$color.'">');
-                     // Removing Order By Links from Table for now.
-                    /*
                     echo(' <a href="'.$thispage);
                     if ( strlen($stuff) > 0 ) {
                         echo("?");
                         echo($stuff);
                     }
                     echo('">');
-                    */
                     echo(ucwords(str_replace('_',' ',$k)));
                     echo($arrow);
                     echo("</a></th>\n");

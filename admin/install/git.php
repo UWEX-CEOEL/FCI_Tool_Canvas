@@ -4,6 +4,7 @@ use \Tsugi\Util\U;
 use \Tsugi\Util\Git;
 use \Tsugi\Util\Net;
 use \Tsugi\Util\LTI;
+use \Tsugi\Core\LTIX;
 use \Tsugi\Core\Cache;
 
 if (!defined('COOKIE_SESSION')) define('COOKIE_SESSION', true);
@@ -49,12 +50,18 @@ if ( !isset($_REQUEST['command']) ) {
     die_with_error_log('command option required');
 }
 
+// Get database connection
+$PDOX = LTIX::getConnection();
+
+// Check to see if we are in a cluster
+$other_nodes = count(getClusterIPs());
+
 // Get all the paths including tsugi
 $tsugihash = md5($CFG->dirroot);
 $paths = array();
 $paths[$tsugihash] = $CFG->dirroot;
 if ( isset($CFG->install_folder) ) {
-    $path = $CFG->removeRelativePath($CFG->install_folder);
+    $path = U::remove_relative_path($CFG->install_folder);
     $folders = findAllFolders($path);
     foreach($folders as $folder){
         $git = $folder . '/.git';
@@ -130,7 +137,7 @@ if ( $command == 'pull' ) {
     if ( isset($_REQUEST['folder']) ) {
         $sub_folder = $_REQUEST['folder'];
         if ( strlen($sub_folder) < 1 || ! U::goodFolder($sub_folder) ) {
-            die_with_error_log('Badly folder name: '.$sub_folder);
+            die_with_error_log('Bad folder name: '.$sub_folder);
         }
     }
 } else {
@@ -156,13 +163,32 @@ if ( isset($_POST['command']) && $command == "pull" ) {
         die_with_error_log('Unable to execute git. '.$error);
     }
 }
+// Handle the clone request in a cluster
+if ( $other_nodes >= 1 && isset($_POST['command']) && $command == "clone" ) {
+    $folder = $CFG->install_folder.'/'.basename($remote,'.git');
+    $folder = \Tsugi\Util\U::remove_relative_path($folder);
+    $sql = "INSERT INTO {$CFG->dbprefix}lms_tools
+        ( toolpath, name, description, clone_url, gitversion, created_at, updated_at ) VALUES
+        ( :toolpath, :name, :description, :clone_url, :gitversion, NOW(), NULL )";
+    $values = array(
+        ":toolpath" => $folder,
+        ":name" => 'name',
+        ":description" => 'description',
+        ":clone_url" => $remote,
+        ":gitversion" => 'master'
+    );
+    $q = $PDOX->queryReturnError($sql, $values);
+    $_SESSION['git_results'] = "Tool scheduled for cluster-wide installation";
+    header('Location: '.addSession('git.php'));
+    return;
+}
 
 // Handle the clone POST - do the actual work
-if ( isset($_POST['command']) && $command == "clone" ) {
+if ( $other_nodes < 1 && isset($_POST['command']) && $command == "clone" ) {
 
     try {
         $folder = $CFG->install_folder.'/'.basename($remote,'.git');
-        $folder = \Tsugi\Config\ConfigInfo::removeRelativePath($folder);
+        $folder = \Tsugi\Util\U::remove_relative_path($folder);
         $repo = new \Tsugi\Util\GitRepo($folder, true,  false);
         $log = $repo->clone_from($remote);
         $results = "Command: git clone $remote\n";
@@ -179,7 +205,30 @@ if ( isset($_POST['command']) && $command == "clone" ) {
                 if ( $file == '.' || $files == '..' ) continue;
                 $results .= '  '.$file."\n";
             }
+            $detail = new \stdClass();
+            addRepoInfo($detail, $repo);
+            if ( isset($detail->status) ) {
+                $results .= "\nStatus:\n";
+                $results .= $detail->status;
+            }
+
+            $sql = "INSERT INTO {$CFG->dbprefix}lms_tools
+                ( toolpath, name, description, clone_url, gitversion, created_at, updated_at ) VALUES
+                ( :toolpath, :name, :description, :clone_url, :gitversion, NOW(), NOW() )";
+            $values = array(
+                ":toolpath" => $folder,
+                ":name" => 'name',
+                ":description" => 'description',
+                ":clone_url" => $remote,
+                ":gitversion" => 'master'
+            );
+            $q = $PDOX->queryReturnError($sql, $values);
+
+            // Update the status for this cluster
+            updateToolStatus($folder, $detail);
         }
+
+
         $_SESSION['git_results'] = $results;
         header('Location: '.addSession('git.php'));
         return;

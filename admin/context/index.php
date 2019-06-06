@@ -19,12 +19,14 @@ if ( ! isAdmin() ) {
 }
 
 $query_parms = false;
-$searchfields = array("C.context_id", "title", "C.created_at", "C.updated_at");
-$sql = "SELECT C.context_id AS context_id, title, count(M.user_id) AS members, C.key_id AS key_value, C.created_at, C.updated_at
+$searchfields = array("C.context_id", "title", "C.created_at", "C.updated_at", "C.login_at", "C.login_count");
+$sql = "SELECT C.context_id AS context_id, title, count(M.user_id) AS members, C.key_id AS key_value,
+            CASE WHEN ISNULL(gc_secret) THEN 'LTI' ELSE 'Google' END AS key_type,
+            C.login_at, C.login_count, C.created_at, C.updated_at
         FROM {$CFG->dbprefix}lti_context AS C
         LEFT JOIN {$CFG->dbprefix}lti_membership AS M ON C.context_id = M.context_id
         GROUP BY C.context_id";
-$orderfields = array("C.context_id", "key_value", "title", "C.created_at", "C.updated_at");
+$orderfields = array("C.context_id", "key_value", "title", "C.created_at", "C.updated_at", "C.login_at", "C.login_count");
 
 $newsql = Table::pagedQuery($sql, $query_parms, $searchfields, $orderfields);
 // echo("<pre>\n$newsql\n</pre>\n");

@@ -11,10 +11,8 @@ use \Tsugi\Core\LTIX;
 
 header('Content-Type: text/html; charset=utf-8');
 session_start();
-
-if ( ! ( isset($_SESSION['id']) || isAdmin() ) ) {
-    die('Must be logged in or admin');
-}
+require_once("../gate.php");
+if ( $REDIRECTED === true || ! isset($_SESSION["admin"]) ) return;
 
 $tablename = "{$CFG->dbprefix}key_request";
 $current = $CFG->getCurrentFileUrl(__FILE__);

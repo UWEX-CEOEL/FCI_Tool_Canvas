@@ -2,8 +2,11 @@
 
 namespace Tsugi\UI;
 
+use Tsugi\Util\U;
 use Tsugi\Core\LTIX;
+use Tsugi\Core\WebSocket;
 use \Tsugi\Crypt\SecureCookie;
+use Tsugi\UI\HandleBars;
 
 /**
  * This is a class that captures the output conventions of Tusgi.
@@ -18,13 +21,14 @@ use \Tsugi\Crypt\SecureCookie;
  * A typical Tsugi Tool can get a lot done with the rough outline:
  *
  *     use \Tsugi\Core\LTIX;
+ *     use \Tsugi\Util\U;
  *
  *     // Require CONTEXT, USER, and LINK
  *     $LAUNCH = LTIX::requireData();
  *
  *     // Handle incoming POST data and redirect as necessary...
  *     if ( ... ) {
- *         header( 'Location: '.addSession('index.php') ) ;
+ *         header( 'Location: '.U::addSession('index.php') ) ;
  *     }
  *
  *     // Done with POST
@@ -47,7 +51,15 @@ use \Tsugi\Crypt\SecureCookie;
 
 use \Tsugi\Core\Settings;
 
-class Output extends \Tsugi\Core\SessionAccess {
+class Output {
+
+    /**
+     * A reference to our containing launch
+     */
+    public $launch;
+
+    // Pull in all the session access functions
+    use \Tsugi\Core\SessionTrait;
 
     public $buffer = false;
 
@@ -62,12 +74,15 @@ class Output extends \Tsugi\Core\SessionAccess {
     function flashMessages() {
         ob_start();
         if ( $this->session_get('error') ) {
-            echo '<div class="alert alert-danger" style="clear:both"><a href="#" class="close" data-dismiss="alert">&times;</a>'.
-            $this->session_get('error')."</div>\n";
+            echo '<div class="alert alert-danger alert-banner" style="clear:both">
+                    <div class="container"><a href="#" class="close" data-dismiss="alert">&times;</a>'.
+                $this->session_get('error')."</div></div>\n";
             $this->session_forget('error');
         } else if ( isset($_GET['lti_errormsg']) ) {
-            echo '<div class="alert alert-danger" style="clear:both"><a href="#" class="close" data-dismiss="alert">&times;</a>'.
-            htmlentities($_GET['lti_errormsg'])."</div>";
+            echo '<div class="alert alert-danger alert-banner" style="clear:both">
+                    <div class="container"><a href="#" class="close" data-dismiss="alert">&times;</a>'.
+                htmlentities($_GET['lti_errormsg'])."</div></div>";
+
             if ( isset($_GET['detail']) ) {
                 echo("\n<!--\n");
                 echo(str_replace("-->","--:>",$_GET['detail']));
@@ -76,8 +91,10 @@ class Output extends \Tsugi\Core\SessionAccess {
         }
 
         if ( $this->session_get('success') ) {
-            echo '<div class="alert alert-success" style="clear:both"><a href="#" class="close" data-dismiss="alert">&times;</a>'.
-            $this->session_get('success')."</div>\n";
+            echo '<div class="alert alert-success alert-banner" style="clear:both">
+                    <div class="container"><a href="#" class="close" data-dismiss="alert">&times;</a>'.
+                $this->session_get('success')."</div></div>\n";
+
             $this->session_forget('success');
         }
 
@@ -88,11 +105,18 @@ class Output extends \Tsugi\Core\SessionAccess {
     }
 
     /**
-     * Emit the HTML for the header.
+     * Start the header material of a normal Tsugi Page
+     *
+     * This outputs everything but does not close the <head>
+     * tag so the tool can add its own head material before
+     * calling bodyStart().
+     *
+     * If this class is set to buffer, the output is returned
+     * in a string instead of being printed to the response.
      */
     function header() {
-        global $HEAD_CONTENT_SENT, $CFG, $RUNNING_IN_TOOL;
-        global $CFG;
+        global $HEAD_CONTENT_SENT, $CFG, $RUNNING_IN_TOOL, $CONTEXT, $USER, $LINK;
+
         if ( $HEAD_CONTENT_SENT === true ) return;
         header('Content-Type: text/html; charset=utf-8');
         ob_start();
@@ -102,19 +126,65 @@ class Output extends \Tsugi\Core\SessionAccess {
         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" >
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title><?= $CFG->servicename ?><?php if ( isset($CFG->context_title) ) echo(' - '.$CFG->context_title); ?></title>
+        <script>
+        var _TSUGI = {
+<?php
+            // https://stackoverflow.com/questions/23740548/how-to-pass-variables-and-data-from-php-to-javascript
+            if ( isset($CONTEXT->title) ) {
+                echo('            context_title: '.json_encode($CONTEXT->title).",\n");
+            }
+            if ( isset($LINK->title) ) {
+                echo('            link_title: '.json_encode($LINK->title).",\n");
+            }
+            if ( isset($USER->displayname) ) {
+                echo('            user_displayname: '.json_encode($USER->displayname).",\n");
+            }
+            if ( isset($USER->locale) ) {
+                echo('            user_locale: '.json_encode($USER->locale).",\n");
+            }
+            if ( strlen(session_id()) > 0 && ini_get('session.use_cookies') == '0' ) {
+                echo('            ajax_session: "'.urlencode(session_name()).'='.urlencode(session_id()).'"'.",\n");
+            } else {
+                echo('            ajax_session: false,'."\n");
+            }
+
+            if ( isset($USER->instructor) && $USER->instructor ) {
+                echo('            instructor: true,  // Use only for UI display'."\n");
+            }
+            $heartbeat = 10*60*1000; // 10 minutes
+            if ( isset($CFG->sessionlifetime) ) {
+                $heartbeat = ( $CFG->sessionlifetime * 1000) / 2;
+            }
+            if ( $heartbeat < 10*60*1000 ) $heartbeat = 10*60*1000;   // Minumum 10 minutes
+            // $heartbeat = 10000; // Debug 10 seconds
+            $heartbeat_url = self::getUtilUrl('/heartbeat.php');
+            $heartbeat_url = U::add_url_parm($heartbeat_url,'msec',$heartbeat);
+            $heartbeat_url = U::addSession($heartbeat_url);
+?>
+            heartbeat: <?= $heartbeat ?>,
+            heartbeat_url: "<?= $heartbeat_url ?>",
+            rest_path: <?= json_encode(U::rest_path()) ?>,
+            spinnerUrl: "<?= self::getSpinnerUrl() ?>",
+            staticroot: "<?= $CFG->staticroot ?>",
+            websocket_url: <?= WebSocket::enabled() && $LINK ? '"'.$CFG->websocket_url.'"' : 'false' ?>,
+            websocket_token: <?= WebSocket::enabled() && $LINK ? '"'.WebSocket::getToken($LINK->launch).'"' : 'false' ?>,
+            window_close_message: "<?= _m('Application complete') ?>",
+            session_expire_message: "<?= _m('Your session has expired') ?>"
+        }
+        </script>
+        <!-- Tiny bit of JS -->
+        <script src="<?= $CFG->staticroot ?>/js/tsugiscripts_head.js"></script>
         <!-- Le styles -->
         <link href="<?= $CFG->staticroot ?>/bootstrap-3.1.1/css/<?php
             if ( isset($CFG->bootswatch) ) echo('bootswatch/'.$CFG->bootswatch.'/'); ?>bootstrap.min.css" rel="stylesheet">
-
         <link href="<?= $CFG->staticroot ?>/js/jquery-ui-1.11.4/jquery-ui.min.css" rel="stylesheet">
-        <link href="<?= $CFG->staticroot ?>/font-awesome-4.4.0/css/font-awesome.min.css" rel="stylesheet">
+        <?php if ( strpos($CFG->fontawesome, 'free-5.') > 0 ) { ?>
+        <link href="<?= $CFG->fontawesome ?>/css/all.css" rel="stylesheet">
+        <link href="<?= $CFG->fontawesome ?>/css/v4-shims.css" rel="stylesheet">
+        <?php } else { ?>
+        <link href="<?= $CFG->fontawesome ?>/css/font-awesome.min.css" rel="stylesheet">
+        <?php } ?>
         <link href="<?= $CFG->staticroot ?>/css/tsugi.css" rel="stylesheet">
-        <script src="<?= $CFG->staticroot ?>/js/tsugiscripts_head.js"></script>
-        <script>
-        var _TSUGI = {
-            spinnerUrl: "<?= self::getSpinnerUrl() ?>"
-        }
-        </script>
 
     <style>
     body {
@@ -127,7 +197,28 @@ class Output extends \Tsugi\Core\SessionAccess {
     .container_iframe {
         margin-left: 10px;
         margin-right: 10px;
+    }
+<?php
+if ( isset($CFG->extra_css) ) {
+    echo($CFG->extra_css."\n");
 }
+?>
+<?php
+if ( isset($CFG->bootswatch_color) ) {
+    $grad = self::get_gradient($CFG->bootswatch_color);
+?>
+.navbar{
+    background-image:linear-gradient(<?= $grad[0]?>,<?= $grad[1] ?> 60%,<?= $grad[2] ?>);
+    background-image:-webkit-linear-gradient(<?= $grad[0]?>,<?= $grad[1] ?> 60%,<?= $grad[2] ?>);
+    border-bottom:1px solid <?= $grad[3]?>;
+    background-color: <?= $grad[3]?>;
+}
+.navbar-default .navbar-nav>li>a:hover, .navbar-default .navbar-nav>li>a:focus {
+    background-color: <?= $grad[3]?>;
+}
+
+h1, h2, h3, h4 { color: <?= $grad[0]?>; }
+<?php } ?>
 </style>
 <?php // https://lefkomedia.com/adding-external-link-indicator-with-css/
   if ( $CFG->google_translate ) { ?>
@@ -175,17 +266,29 @@ body {
         echo($ob_output);
     }
 
+    /**
+     * Finish the head and start the body of a Tsugi HTML page.
+     *
+     * By default this demands that we are in a GET request.  It
+     * is a fatal error to call this code if we are responding
+     * to a POST request unless this behavior is overidden.
+     *
+     * @param $checkpost (optional, boolean)  This can be set to
+     * false to emit the body start even for a POST request.
+     */
     function bodyStart($checkpost=true) {
-    // If we are in an iframe use different margins
+        global $CFG;
         ob_start();
+        // If we are in an iframe use different margins
 ?>
 </head>
 <body prefix="oer: http://oerschema.org">
+<div id="body_container">
 <script>
 if (window!=window.top) {
-    document.write('<div class="container_iframe">');
+    document.getElementById("body_container").className = "container_iframe";
 } else {
-    document.write('<div class="container">');
+    document.getElementById("body_container").className = "container";
 }
 </script>
 <?php
@@ -194,9 +297,22 @@ if (window!=window.top) {
             echo('<p style="color:red">Error - Unhandled POST request</p>');
             echo("\n<pre>\n");
             echo($dump);
+            if ( count($_FILES) > 0 ) {
+                $files = self::safe_var_dump($_FILES);
+                echo($files);
+            }
             echo("\n</pre>\n");
             error_log($dump);
             die_with_error_log("Unhandled POST request");
+        }
+
+        // Complain if this is a test key
+        $key_key = $this->ltiParameter('key_key');
+        if ( $key_key == '12345' &&
+            strpos($CFG->wwwroot, '://localhost') === false ) {
+            echo('<div style="background-color: orange; position: absolute; bottom: 5px; left: 5px;">');
+            echo(_m('Test Key - Do not use for production'));
+            echo('</div>');
         }
 
         $HEAD_CONTENT_SENT = true;
@@ -210,34 +326,19 @@ if (window!=window.top) {
     /**
      * templateInclude - Include a handlebars template, dealing with i18n
      *
-     * This is a normal handlebars template except we can ask for a translation
-     * of text as follows:
-     *
-     *    ...
-     *    {{__ 'Hello world' }}
-     *    ...
-     *
-     * The i18n replacement will be handled in the server in the template.  Single
-     * or Double quotes can be used.
+     * Deprecated - Moved to HandleBars
      */
-    function templateInclude($name) {
-        if ( is_array($name) ) {
-            foreach($name as $n) {
-                self::templateInclude($n);
-            }
-            return;
-        }
-        echo('<script id="template-'.$name.'" type="text/x-handlebars-template">'."\n");
-        $template = file_get_contents('templates/'.$name.'.hbs');
-        $new = preg_replace_callback(
-            '|{{__ *[\'"]([^\'"]*)[\'"].*?}}|',
-            function ($matches) {
-                return __(htmlent_utf8(trim($matches[1])));
-            },
-            $template
-        );
-        echo($new);
-        echo("</script>\n");
+    public static function templateInclude($name) {
+        HandleBars::templateInclude($name);
+    }
+
+    /**
+     * templateProcess - Process a handlebars template, dealing with i18n
+     *
+     * Deprecated - Moved to HandleBars
+     */
+    public static function templateProcess($template) {
+        return HandleBars::templateProcess($template);
     }
 
     function footerStart() {
@@ -246,31 +347,25 @@ if (window!=window.top) {
         echo('<script src="'.$CFG->staticroot.'/js/jquery-1.11.3.js"></script>'."\n");
         echo('<script src="'.$CFG->staticroot.'/bootstrap-3.1.1/js/bootstrap.min.js"></script>'."\n");
         echo('<script src="'.$CFG->staticroot.'/js/jquery-ui-1.11.4/jquery-ui.min.js"></script>'."\n");
+        echo('<script src="'.$CFG->staticroot.'/js/jquery.timeago-1.6.3.js"></script>'."\n");
         echo('<script src="'.$CFG->staticroot.'/js/handlebars-v4.0.2.js"></script>'."\n");
         echo('<script src="'.$CFG->staticroot.'/tmpljs-3.8.0/tmpl.min.js"></script>'."\n");
         echo('<script src="'.$CFG->staticroot.'/js/tsugiscripts.js"></script>'."\n");
 
-        if ( isset($CFG->sessionlifetime) ) {
-            $heartbeat = ( $CFG->sessionlifetime * 1000) / 2;
-            // $heartbeat = 10000;
-            $heartbeat_url = self::getUtilUrl('/heartbeat.php');
-            $heartbeat_url = addSession($heartbeat_url);
-    ?>
-    <script type="text/javascript">
-    HEARTBEAT_URL = '<?= $heartbeat_url ?>';
-    HEARTBEAT_INTERVAL = setInterval(doHeartBeat, <?= $heartbeat ?>);
+?>
+<script type="text/javascript">
+    HEARTBEAT_TIMEOUT = setTimeout(doHeartBeat, _TSUGI.heartbeat);
     tsugiEmbedMenu();
-    </script>
-    <?php
-        }
+</script>
+<?php
 
-        if ( $CFG->google_translate ) {
-    ?>
+        if ( U::allow_track() && $CFG->google_translate ) {
+?>
 <div id="google_translate_element" style="position: fixed; right: 1em; bottom: 0.25em;"></div><script type="text/javascript">
 function googleTranslateElementInit() {
   new google.translate.TranslateElement({pageLanguage: "en", layout: google.translate.TranslateElement.InlineLayout.SIMPLE
 <?php
-    if ( $CFG->universal_analytics ) {
+    if ( U::allow_track() && $CFG->universal_analytics ) {
         echo(', gaTrack: true, gaId: "'.$CFG->universal_analytics.'"'."\n");
     }
 ?>
@@ -283,7 +378,54 @@ function googleTranslateElementInit() {
 
         if ( $this->session_get('APP_FOOTER') ) echo($this->session_get('APP_FOOTER'));
 
-        $this->doAnalytics();
+        if ( U::allow_track() ) $this->doAnalytics();
+
+        // TODO: Remove this when PHP 7 is fixed..  Sigh.
+        if ( PHP_VERSION_ID > 70000 ) {
+?>
+<script>
+// PHP VERSION 7.0 and 7.1 HACK
+// https://stackoverflow.com/questions/44980654/how-can-i-make-trans-sid-cookie-less-sessions-work-in-php-7-1
+$('a').each(function (x) {
+    var href = $(this).attr('href');
+    if ( ! href ) return;
+    if ( ! href.startsWith('#') ) return;
+    var pos = href.indexOf('/?');
+    if ( pos < 1 ) return;
+    console.dir('Patching broken # href='+href);
+    href = href.substring(0,pos);
+    $(this).attr('href', href);
+});
+<?php
+// Hack to compensate for PHP 7.0 cookiless session failure
+    if ( ini_get('session.use_cookies') == '0' ) {
+?>
+console.log('Checking malformed href for php 7.0');
+$('a').each(function (x) {
+    var href = $(this).attr('href');
+    var sess_name = '<?= session_name() ?>';
+    var sess_id = '<?= session_id() ?>';
+    if ( ! href ) return;
+    if ( href.startsWith('#') ) return;
+    if ( href.startsWith('http://') ) return;
+    if ( href.startsWith('javascript:') ) return;
+    if ( href.startsWith('https://') ) return;
+    if ( href.startsWith('//') ) return;
+    if ( href.indexOf(sess_name) > 0 ) return;
+    if ( href.indexOf('?') > 0 ) {
+        href = href + '&';
+    } else {
+        href = href + '?';
+    }
+    href = href + sess_name + '=' + sess_id;
+    console.dir('Patching missing session href='+href);
+    $(this).attr('href', href);
+});
+<?php } ?>
+
+</script>
+<?php
+        }
 
         $ob_output = ob_get_contents();
         ob_end_clean();
@@ -299,11 +441,17 @@ function googleTranslateElementInit() {
     public static function getUtilUrl($path)
     {
         global $CFG;
-        $retval = $CFG->vendorroot.$path;
         if ( isset($CFG->utilroot) ) {
-            $retval = $CFG->utilroot.$path;
+            return $CFG->utilroot.$path;
         }
+
+        // From wwwroot
+        $path = str_replace('.php','',$path);
+        $retval = $CFG->wwwroot . '/util' . $path;
         return $retval;
+
+        // The old way from "vendor"
+        // return $CFG->vendorroot.$path;
     }
 
     /**
@@ -353,10 +501,10 @@ function googleTranslateElementInit() {
         $retval = array("success" => true, "seconds" => $seconds,
                 "now" => $now, "count" => $count, "cookie" => $cookie,
                 "id" => session_id());
-        $retval['lti'] = LTIX::wrapped_session_get($session_object, 'lti');
-        // $retval['lti'] = false;
+        $lti = LTIX::wrapped_session_get($session_object, 'lti');
+        $retval['lti'] = is_array($lti) && U::get($lti, 'key_id');
         $retval['sessionlifetime'] = $CFG->sessionlifetime;
-        echo(json_encode($retval));
+        return $retval;
     }
 
     function footerEnd() {
@@ -397,15 +545,8 @@ function googleTranslateElementInit() {
     /**
       * Welcome the user to the course
       */
-    function welcomeUserCourse($welcomePage=false) {
+    function welcomeUserCourse() {
         global $USER, $CONTEXT;
-
-        if(!$USER->instructor && $welcomePage!==false){
-            echo($welcomePage);
-            //Add Thematic Break
-            echo('<hr>');
-        }
-        
         if ( isset($USER->displayname) ) {
             if ( isset($CONTEXT->title) ) {
                 printf(_m("<p>Welcome %s from %s"), htmlent_utf8($USER->displayname), htmlent_utf8($CONTEXT->title));
@@ -420,7 +561,9 @@ function googleTranslateElementInit() {
             }
         }
 
-        if ( $USER->instructor ) {
+        if ( $USER->admin ) {
+            echo(" "._m("(Instructor+Administrator)"));
+        } else if ( $USER->instructor ) {
             echo(" "._m("(Instructor)"));
         }
         echo("</p>\n");
@@ -455,7 +598,7 @@ function googleTranslateElementInit() {
         if ( $text == "Cancel" || $text == _m("Cancel") ) $button = "btn-warning";
 
         if ( $url == "_close" ) {
-            echo("<a href=\"#\" onclick=\"window.close();\" class=\"btn ".$button."\">".$text."</a>\n");
+            echo("<a href=\"#\" onclick=\"window_close();\" class=\"btn ".$button."\">".$text."</a>\n");
         } else {
             echo("<a href==\"$url\"  class=\"btn ".$button."\">".$text."</button>\n");
         }
@@ -468,7 +611,7 @@ function googleTranslateElementInit() {
         if ( $text === false ) $text = _m("Exit");
         $button = "btn-success";
         if ( $text == "Cancel" || $text == _m("Cancel") ) $button = "btn-warning";
-        echo("<a href=\"#\" onclick=\"window.close();\" class=\"btn ".$button."\">".$text."</a>\n");
+        echo("<a href=\"#\" onclick=\"window_close();\" class=\"btn ".$button."\">".$text."</a>\n");
     }
 
     function togglePre($title, $html) {
@@ -509,7 +652,7 @@ function googleTranslateElementInit() {
         global $CFG;
         $R = $CFG->wwwroot . '/';
         $set = new \Tsugi\UI\MenuSet();
-        $set->setHome('Done', 'javascript:window.close();');
+        $set->setHome('Done', 'javascript:window_close();');
         return $set;
     }
 
@@ -518,32 +661,39 @@ function googleTranslateElementInit() {
         $R = $CFG->wwwroot . '/';
         $set = new \Tsugi\UI\MenuSet();
         $set->setHome($CFG->servicename, $CFG->apphome);
-
-        if ( $CFG->DEVELOPER ) {
-            $set->addLeft('Developer', $R.'dev');
+        $set->addLeft('Tools', $R.'store');
+        if ( $this->session_get('id') ) {
+                $set->addLeft('Settings', $R . 'settings');
         }
-        if ( $this->session_get('id') || $CFG->DEVELOPER ) {
-            $set->addLeft('Admin', $R.'admin/index.php');
+
+        if ( $this->session_get('id') ) {
+            $submenu = new \Tsugi\UI\Menu();
+            $submenu->addLink('Profile', $R.'profile');
+            if ( $CFG->DEVELOPER || U::get($_COOKIE, 'adminmenu') ) {
+                $submenu->addLink('Admin', $R.'admin');
+            }
+            if ( $CFG->DEVELOPER ) $submenu->addLink('Developer', $R.'dev');
+
+            $submenu->addLink('Logout', $R.'logout');
+            $set->addRight(htmlentities($this->session_get('displayname', '')), $submenu);
+        } else {
+            if ( $CFG->DEVELOPER || U::get($_COOKIE, 'adminmenu') ) {
+                $set->addLeft('Admin', $R.'admin');
+            }
+            if ( $CFG->DEVELOPER ) $set->addLeft('Developer', $R.'dev');
+            if ( $CFG->google_client_id ) {
+                $set->addRight('Login', $R.'login');
+            }
         }
 
         $submenu = new \Tsugi\UI\Menu();
         $submenu->addLink('IMS LTI 1.1 Spec', 'http://www.imsglobal.org/LTI/v1p1p1/ltiIMGv1p1p1.html')
+            ->addLink('IMS LTI Deep Linking', 'https://www.imsglobal.org/specs/lticiv1p0')
             ->addLink('IMS LTI 2.0 Spec', 'http://www.imsglobal.org/lti/ltiv2p0/ltiIMGv2p0.html')
+            ->addLink('Google Classroom', 'https://classroom.google.com/')
             ->addLink('Tsugi Project Site', 'https://www.tsugi.org/');
+        if ( $CFG->DEVELOPER) $set->addRight('Links', $submenu);
 
-        $set->addLeft('Links', $submenu);
-
-        if ( $this->session_get('id') ) {
-            $submenu = new \Tsugi\UI\Menu();
-            $submenu->addLink('Profile', $R.'profile')
-                ->addLink('Use this Service', $R . 'admin/key/index.php')
-                ->addLink('Logout', $R.'logout');
-            $set->addRight(htmlentities($this->session_get('displayname', '')), $submenu);
-        } else {
-            $set->addRight('Login', $R.'login');
-        }
-
-        $set->addRight('<img style="width:4em;" src="'. $CFG->staticroot . '/img/logos/tsugi-logo.png' .'">', $R.'about');
         return $set;
     }
 
@@ -585,13 +735,9 @@ function googleTranslateElementInit() {
      * (2) If we are launched via LTI w/o a session
      */
     function topNav($menu_set=false) {
-        global $CFG;
+        global $CFG, $LAUNCH;
         $sess_key = 'tsugi_top_nav_'.$CFG->wwwroot;
-        $launch_return_url = LTIX::ltiRawParameter('launch_presentation_return_url', false);
-        // Canvas test
-        $product = LTIX::ltiRawParameter('tool_consumer_info_product_family_code', false);
-        $tci_description = LTIX::ltiRawParameter('tool_consumer_instance_description', false);
-        if ( $product == 'ims' && $tci_description == 'Coursera') $product = 'coursera';
+        $launch_return_url = $LAUNCH->ltiRawParameter('launch_presentation_return_url', false);
 
         $same_host = false;
         if ( $CFG->apphome && startsWith($launch_return_url, $CFG->apphome) ) $same_host = true;
@@ -609,10 +755,10 @@ function googleTranslateElementInit() {
         } else if ( $launch_target !== false && strtolower($launch_target) == 'window' ) {
             $menu_set = self::closeMenuSet();
         // Since Coursers sets precious little
-        } else if ( $product == 'coursera' ) {
+        } else if ( $LAUNCH->isCoursera() ) {
             $menu_set = self::closeMenuSet();
         // Since canvas does not set launch_target properly
-        } else if ( $launch_target !== false && ($product == 'canvas' || $product == 'coursera')) {
+        } else if ( $launch_target !== false && ( $LAUNCH->isCanvas() || $LAUNCH->isCoursera() ) ) {
             $menu_set = self::closeMenuSet();
         } else if ( $launch_return_url !== false ) {
             $menu_set = self::returnMenuSet($launch_return_url);
@@ -664,7 +810,7 @@ function googleTranslateElementInit() {
     }
 
     function menuNav($set) {
-        global $CFG;
+        global $CFG, $LAUNCH;
 
 $retval = <<< EOF
 <nav class="navbar navbar-default navbar-fixed-top" role="navigation" id="tsugi_main_nav_bar" style="display:none">
@@ -704,26 +850,27 @@ EOF;
         $retval .= "    </div> <!--/.nav-collapse -->\n";
         $retval .= "  </div> <!--container-fluid -->\n";
         $retval .= "</nav>\n";
+        $inmoodle = $LAUNCH->isMoodle() ? "true" : "false";
         $retval .= "<script>\n";
-        $retval .= "if ( ! inIframe() ) {\n";
+        $retval .= "if ( ".$inmoodle." || ! inIframe() ) {\n";
         $retval .= "  document.getElementById('tsugi_main_nav_bar').style.display = 'block';\n";
         $retval .= "  document.getElementsByTagName('body')[0].style.paddingTop = '70px';\n";
         $retval .= "}\n";
         $retval .= "</script>\n";
 
         // See if the LTI login can be linked to the site login...
-    	if ( isset($_SESSION['lti']) && !defined('COOKIE_SESSION') &&  isset($_COOKIE[$CFG->cookiename])) {
+        if ( isset($_SESSION['lti']) && !defined('COOKIE_SESSION') &&  isset($_COOKIE[$CFG->cookiename])) {
             $ct = $_COOKIE[$CFG->cookiename];
             // error_log("Cookie: $ct \n");
             $pieces = SecureCookie::extract($ct);
             $lti = $_SESSION['lti'];
             // Contemplate: Do we care if the lti email matches the cookie email?
-            if ( count($pieces) == 3 && isset($lti['user_id']) && !isset($lti['profile_id']) && isset($lti['user_email']) ) {
-            	$linkprofile_url = self::getUtilUrl('/linkprofile.php');
-            	$linkprofile_url = addSession($linkprofile_url);
+            if ( is_array($pieces) && count($pieces) == 3 && isset($lti['user_id']) && !isset($lti['profile_id']) && isset($lti['user_email']) ) {
+                $linkprofile_url = self::getUtilUrl('/linkprofile.php');
+                $linkprofile_url = U::addSession($linkprofile_url);
                 $retval .= self::embeddedMenu($linkprofile_url, $pieces[1], $lti['user_email']);
             }
-	}
+        }
         return $retval;
     }
 
@@ -790,8 +937,10 @@ EOF;
         foreach ( $debug_log as $k => $v ) {
             if ( count($v) > 1 ) {
                 $this->togglePre($v[0], $v[1]);
-            } else {
+            } else if ( is_array($v) ) {
                 line_out($v[0]);
+            } else if ( is_string($v) ) {
+                line_out($v);
             }
         }
     }
@@ -813,6 +962,26 @@ EOF;
     }
 
     /**
+     * Return the text for a full-screen loader
+     *
+     *     echo($OUTPUT->getScreenOverlay(false));
+     *         ...
+     *     <script>
+     *     showOverlay();
+     *     setTimeout(function() { hideOverlay();} , 5000);
+     *     </script>
+     */
+    function getScreenOverlay($show=true) {
+        global $CFG;
+        return
+            '<div class="tsugi_overlay" id="tsugi_overlay" style="position: fixed, display:'.
+            ($show ? 'block' : 'none'). '">' . "\n" .
+            '<i style="color: blue;" class="fa fa-spinner fa-spin fa-5x fa-fw"></i>' . "\n" .
+            // '<img src="'.$CFG->staticroot.'/img/logos/apereo-logo-blue-spin.svg" id="tsugi_overlay_spinner" width="100px" height="100px">' . "\n" .
+            '</div>' . "\n" ;
+    }
+
+    /**
      * Embed a YouTube video using the standard pattern
      */
     function embedYouTube($id, $title) {
@@ -831,12 +1000,17 @@ EOF;
      * as &lt;form> and &lt;a href tags are properly handled already
      * by the PHP built-in "don't use cookies for session" support.
      */
-    function doRedirect($location) {
+    public static function doRedirect($location) {
         if ( headers_sent() ) {
-            echo('<a href="'.htmlentities($location).'">Continue</a>'."\n");
+            // TODO: Check if this is fixed in PHP 70200
+            // https://bugs.php.net/bug.php?id=74892
+            if ( PHP_VERSION_ID >= 70000 ) {
+                $location = U::addSession($location);
+            }
+            echo('<a href="'.$location.'">Continue</a>'."\n");
         } else {
             if ( ini_get('session.use_cookies') == 0 ) {
-                $location = addSession($location);
+                $location = U::addSession($location);
             }
             header("Location: $location");
         }
@@ -845,12 +1019,8 @@ EOF;
     /**
      * Gets an absolute static path to the specified file
      */
-    public static function getLocalStatic($file) {
-        global $CFG;
-        $path = $CFG->getPwd($file);
-        // For now just use wwwroot to be safe
-        // return $CFG->staticroot . "/" . $path;
-        return $CFG->wwwroot . "/" . $path;
+    public static function getLocalStatic() {
+        return U::get_rest_parent();
     }
 
     // http://stackoverflow.com/questions/49547/making-sure-a-web-page-is-not-cached-across-all-browsers
@@ -859,6 +1029,72 @@ EOF;
         header('Cache-Control: no-cache, no-store, must-revalidate'); // HTTP 1.1.
         header('Pragma: no-cache'); // HTTP 1.0.
         header("Expires: Sat, 26 Jul 1997 05:00:00 GMT"); // Date in the past - proxies
+    }
+
+    public static function maxCacheHeader($max_age=604800) {
+        header('Cache-Control: max-age='.$max_age);  // A Week...
+    }
+
+    public static function get_gradient($pos) {
+        $grads = array(
+            array("#4c2119","#48241d","#46261f","#98331f"),
+            array("#511e14","#4d2118","#4b221a","#a12d16"),
+            array("#4c2a19","#482b1d","#462c1f","#98471f"),
+            array("#512814","#4d2a18","#4b2a1a","#a14416"),
+            array("#4c3319","#48331d","#46331f","#985b1f"),
+            array("#513314","#4d3318","#4b331a","#a15b16"),
+            array("#4c3b19","#483a1d","#46391f","#986f1f"),
+            array("#513d14","#4d3b18","#4b3b1a","#a17316"),
+            array("#334c19","#33481d","#33461f","#5b981f"),
+            array("#2a4c19","#2b481d","#2c461f","#47981f"),
+            array("#224c19","#24481d","#26461f","#33981f"),
+            array("#1e5114","#214d18","#224b1a","#2da116"),
+            array("#194c22","#1d4824","#1f4626","#1f9833"),
+            array("#14511e","#184d21","#1a4b22","#16a12d"),
+            array("#194c2a","#1d482b","#1f462c","#1f9847"),
+            array("#145128","#184d2a","#1a4b2a","#16a144"),
+            array("#194c33","#1d4833","#1f4633","#1f985b"),
+            array("#194c3b","#1d483a","#1f4639","#1f986f"),
+            array("#194c44","#1d4841","#1f463f","#1f9884"),
+            array("#19434c","#1d4148","#1f3f46","#1f8498"),
+            array("#144751","#18444d","#1a434b","#168aa1"),
+            array("#193b4c","#1d3a48","#1f3946","#1f6f98"),
+            array("#143d51","#183b4d","#1a3b4b","#1673a1"),
+            array("#19324c","#1d3248","#1f3246","#1f5b98"),
+            array("#143251","#18324d","#1a324b","#165ba1"),
+            array("#264c72","#2c4c6c","#2f4c69","#2775c2"),
+            array("#1e4c7a","#244c74","#274c71","#1c75ce"),
+            array("#192a4c","#1d2b48","#1f2c46","#1f4798"),
+            array("#142851","#182a4d","#1a2a4b","#1644a1"),
+            array("#263f72","#2c416c","#2f4269","#275bc2"),
+            array("#1e3d7a","#243f74","#274071","#1c57ce"),
+            array("#32194c","#321d48","#321f46","#5b1f98"),
+            array("#321451","#32184d","#321a4b","#5b16a1"),
+            array("#4c2672","#4c2c6c","#4c2f69","#7527c2"),
+            array("#4c1e7a","#4c2474","#4c2771","#751cce"),
+            array("#3b194c","#3a1d48","#391f46","#6f1f98"),
+            array("#3d1451","#3b184d","#3b1a4b","#7316a1"),
+            array("#592672","#572c6c","#562f69","#8f27c2"),
+            array("#5b1e7a","#592474","#582771","#931cce"),
+            array("#43194c","#411d48","#3f1f46","#841f98"),
+            array("#471451","#44184d","#431a4b","#8a16a1"),
+            array("#4c194c","#481d48","#461f46","#981f98"),
+            array("#511451","#4d184d","#4b1a4b","#a116a1"),
+            array("#4c1944","#481d41","#461f3f","#981f84"),
+            array("#511447","#4d1844","#4b1a43","#a1168a"),
+            array("#4c193b","#481d3a","#461f39","#981f6f"),
+            array("#51143d","#4d183b","#4b1a3b","#a11673"),
+            array("#4c1933","#481d33","#461f33","#981f5b"),
+            array("#511433","#4d1833","#4b1a33","#a1165b"),
+            array("#4c192a","#481d2b","#461f2c","#981f47"),
+            array("#511428","#4d182a","#4b1a2a","#a11644"),
+            array("#4c1922","#481d24","#461f26","#981f33"),
+            array("#51141e","#4d1821","#4b1a22","#a1162d")
+        );
+
+        $pos = $pos % count($grads);
+
+        return $grads[$pos];
     }
 
     public static function displaySize($size) {
@@ -875,16 +1111,89 @@ EOF;
     }
 
     // Clean out the array of 'secret' keys
-    public static function safe_var_dump($x) {
-            ob_start();
-            if ( isset($x['secret']) ) $x['secret'] = MD5($x['secret']);
-            if ( is_array($x) ) foreach ( $x as &$v ) {
-                if ( is_array($v) && isset($v['secret']) ) $v['secret'] = MD5($v['secret']);
+    public static function safe_var_cleanup(&$x, $depth) {
+        if ( $depth >= 5 ) return;
+        if ( is_array($x) || is_object($x) ) {
+            foreach($x as $k => $v ) {
+                if (  is_string($v) && strlen($v) > 0 && strpos($k, 'secret') !== false || strpos($k, 'priv') !== false ) {
+                    if ( is_array($x) ) {
+                        $x[$k] = 'Hidden as MD5: '.MD5($v);
+                    } else {
+                        $x->{$k} = 'Hidden as MD5: '.MD5($v);
+                    }
+                }
+                if ( is_array($v) || is_object($v) ) self::safe_var_cleanup($v,$depth+1);
             }
-            var_dump($x);
-            $result = ob_get_clean();
-            return $result;
+        }
     }
+
+    public static function safe_var_dump($x) {
+        ob_start();
+        self::safe_var_cleanup($x, 0);
+        var_dump($x);
+        $result = ob_get_clean();
+        return $result;
+    }
+
+    public static function safe_print_r($x) {
+        ob_start();
+        self::safe_var_cleanup($x, 0);
+        print_r($x);
+        $result = ob_get_clean();
+        return $result;
+    }
+
+    public static function htmlError($message,$detail,$next=false) {
+        global $CFG;
+        if ( headers_sent() ) header('HTTP/1.1 400 '.$message);
+
+    ?><!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= $CFG->servicename ?><?php if ( isset($CFG->context_title) ) echo(' - '.$CFG->context_title); ?></title>
+    <script>
+    <!-- Tiny bit of JS -->
+    <script src="<?= $CFG->staticroot ?>/js/tsugiscripts_head.js"></script>
+    <!-- Le styles -->
+    <link href="<?= $CFG->staticroot ?>/bootstrap-3.1.1/css/<?php
+        if ( isset($CFG->bootswatch) ) echo('bootswatch/'.$CFG->bootswatch.'/'); ?>bootstrap.min.css" rel="stylesheet">
+    <link href="<?= $CFG->staticroot ?>/js/jquery-ui-1.11.4/jquery-ui.min.css" rel="stylesheet">
+    <link href="<?= $CFG->fontawesome ?>/css/font-awesome.min.css" rel="stylesheet">
+    <link href="<?= $CFG->staticroot ?>/css/tsugi.css" rel="stylesheet">
+   </head>
+<body>
+<div id="dialog-confirm" style="display:none;" title="<?= htmlentities($message) ?>">
+<p><span class="ui-icon ui-icon-alert" style="float:left; margin:12px 12px 20px 0;"></span><?= $detail ?></p>
+</div>
+<?php
+        echo('<script src="'.$CFG->staticroot.'/js/jquery-1.11.3.js"></script>'."\n");
+        echo('<script src="'.$CFG->staticroot.'/bootstrap-3.1.1/js/bootstrap.min.js"></script>'."\n");
+        echo('<script src="'.$CFG->staticroot.'/js/jquery-ui-1.11.4/jquery-ui.min.js"></script>'."\n");
+        echo('<script src="'.$CFG->staticroot.'/js/tsugiscripts.js"></script>'."\n");
+?>
+<script>
+  $( function() {
+    $( "#dialog-confirm" ).dialog({
+      resizable: false,
+      height: "auto",
+      width: 400,
+      modal: true,
+      buttons: {
+<?php if ( $next ) { ?>
+        "Continue": function() {
+            window.location.href = "<?= $next ?>";
+        },
+<?php } ?>
+      }
+    });
+  } );
+  </script>
+</body>
+<?php
+}
+
 
     public static function jsonError($message,$detail="") {
         header('HTTP/1.1 400 '.$message);
@@ -901,6 +1210,30 @@ EOF;
     public static function jsonOutput($json_data) {
         header('Content-Type: application/json; charset=utf-8');
         echo(json_encode($json_data));
+    }
+
+    public static function xmlError($message,$detail="",$code=400) {
+        header('HTTP/1.1 '.$code.' '.$message);
+        header('Content-Type: text/xml; charset=utf-8');
+        echo('<?xml version="1.0" encoding="UTF-8" standalone="yes"?'.">\n");
+        echo("<failure>\n  <message>\n    ");
+        echo(htmlentities($error));
+        echo("  </message>\n");
+        if ( strlen($detail) > 0 ) {
+            echo("  <detail>\n    ");
+            echo(htmlentities($detail));
+            echo("  </detail>\n");
+        }
+        echo("</failure>\n");
+    }
+
+    public static function xmlAuthError($message,$detail="") {
+        self::xmlError($message,$detail,403);
+    }
+
+    public static function xmlOutput($xml_data) {
+        header('Content-Type: text/xml; charset=utf-8');
+        echo($xml_data);
     }
 
     // No Buffering

@@ -360,7 +360,7 @@ $toolcount = 0;
 // If not, we send back all the tools
 
 // Disable for now
-if ( false && in_array('ContentItemSelectionRequest', $tc_capabilities) ) {
+if ( ! $CFG->certification && in_array('ContentItemSelectionRequest', $tc_capabilities) ) {
     echo("This is a ContentItem LMS - Give it back a store URL.\n");
     // Force this to be in wwwroot
     $tp_profile->tool_profile->base_url_choice[0]->secure_base_url = $CFG->wwwroot;
@@ -370,12 +370,14 @@ if ( false && in_array('ContentItemSelectionRequest', $tc_capabilities) ) {
     unset($newhandler->message[0]);
 
     $message_count = 0;
+/*
     $newmsg = clone $save_message;
     $newmsg->path = "/lti/store";
     $newmsg->message_type = "basic-lti-launch-request";
     $newmsg->parameter = $requested_parameters;
     $newmsg->enabled_capability = $tc_capabilities;
     $newhandler->message[$message_count++] = $newmsg;
+*/
 
     $newmsg = clone $save_message;
     $newmsg->message_type = "ContentItemSelectionRequest";
@@ -383,6 +385,47 @@ if ( false && in_array('ContentItemSelectionRequest', $tc_capabilities) ) {
     $newmsg->parameter = $requested_parameters;
     $newmsg->enabled_capability = $tc_capabilities; // TODO: Be more selective
     $newhandler->message[$message_count++] = $newmsg;
+
+    $icon_endpoint = $CFG->fontawesome.'/png/shopping-cart.png';
+
+            $icons = array();
+
+            // Sakai likes beautifully scalable FontAwesome icons - but no one else
+            if ( $ext_lms == 'sakai' ) {
+                $icon_info = new stdClass();
+                $icon_style = array();
+                $icon_style[] = 'FontAwesome';
+                $default_location = new stdClass();
+                $default_location->path = 'fa-shopping-cart';
+                $icon_info->icon_style = $icon_style;
+                $icon_info->default_location = $default_location;
+                $icons[] = $icon_info;
+
+            // BUG: Moodle crashes on icons with absolute paths
+            // https://tracker.moodle.org/browse/MDL-58216
+            // Moodle crashes with "invalidresponse" message (yes no space) on absolute paths
+            // Interestingly, Moodle also seems to not handle "IconEndpoint" selectors either
+            // So leaving the the icon off completely is the best plan for Moodle currently
+            } else if ( $ext_lms == 'moodle' ) {
+/*
+                $default_location = new stdClass();
+                $icon_endpoint = str_replace('fa-','',$fa_icon).'.png';
+                $default_location->path = $icon_endpoint;
+                $icon_info = new stdClass();
+                $icon_info->default_location = $default_location;
+                $icons[] = $icon_info;
+*/
+            // Everyone else (i.e. Canvas) gets a nice CloudFlareable image with an absolute URL.
+            } else {
+                $default_location = new stdClass();
+                $icon_endpoint = $CFG->fontawesome.'/png/shopping-cart.png';
+                $default_location->path = $icon_endpoint;
+                $icon_info = new stdClass();
+                $icon_info->default_location = $default_location;
+                $icons[] = $icon_info;
+            }
+
+            if ( count($icons) > 0 ) $newhandler->icon_info = $icons;
 
     $code = str_replace("/","_",$CFG->wwwroot . $newmsg->path);
     $newhandler->resource_type->code = $code;
@@ -445,7 +488,7 @@ if ( false && in_array('ContentItemSelectionRequest', $tc_capabilities) ) {
             // Everyone else (i.e. Canvas) gets a nice CloudFlareable image with an absolute URL.
             } else {
                 $default_location = new stdClass();
-                $icon_endpoint = $CFG->staticroot.'/font-awesome-4.4.0/png/'.str_replace('fa-','',$fa_icon).'.png';
+                $icon_endpoint = $CFG->fontawesome.'/png/'.str_replace('fa-','',$fa_icon).'.png';
                 $default_location->path = $icon_endpoint;
                 $icon_info = new stdClass();
                 $icon_info->default_location = $default_location;
@@ -539,8 +582,8 @@ if ( $ext_lms == 'moodle') {
     $tp_profile->tool_profile->base_url_choice[0]->selector = $selector;
 
     $icon_choice = new stdClass();
-    $icon_choice->secure_base_url = $CFG->staticroot.'/font-awesome-4.4.0/png/';
-    $icon_choice->default_base_url = $CFG->staticroot.'/font-awesome-4.4.0/png/';
+    $icon_choice->secure_base_url = $CFG->fontawesome.'/png/';
+    $icon_choice->default_base_url = $CFG->fontawesome.'/png/';
     $selector = new stdClass();
     $selector->applies_to = array('IconEndpoint');
     $icon_choice->selector = $selector;

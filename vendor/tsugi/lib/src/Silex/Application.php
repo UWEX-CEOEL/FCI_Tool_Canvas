@@ -2,6 +2,10 @@
 
 namespace Tsugi\Silex;
 
+use Tsugi\Util\U;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\PhpBridgeSessionStorage;
 
@@ -64,6 +68,9 @@ class Application extends \Silex\Application {
         } else {
             $loader = new \Twig_Loader_Filesystem('.');
         }
+
+        $this->tsugi_path = U::get_rest_path();
+        $this->tsugi_parent = U::get_rest_parent();
         
         $yourNewPath = $CFG->dirroot . '/vendor/tsugi/lib/src/Templates';
         $loader->addPath($yourNewPath, 'Tsugi');
@@ -82,6 +89,15 @@ class Application extends \Silex\Application {
         $this->extend('twig', function($twig, $app) {
             $twig->addExtension(new \Tsugi\Silex\GettextExtension());
             return $twig;
+        });
+
+        // Handle failure of the routes
+        $this->error(function (NotFoundHttpException $e, Request $request, $code) {
+            global $CFG, $LAUNCH, $OUTPUT, $USER, $CONTEXT, $LINK, $RESULT;
+
+            return $this['twig']->render('@Tsugi/Error.twig',
+                array('error' => '<p>Page not found.</p>')
+            );
         });
 
     }

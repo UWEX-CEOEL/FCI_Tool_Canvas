@@ -1,11 +1,14 @@
 <?php
-if ( ! isset($CFG) ) die_with_error_log("Please configure this product using config.php");
+use \Tsugi\Util\U;
+use \Tsugi\Core\I18N;
+
+if ( ! isset($CFG) ) die("Please configure this product using config.php");
 
 // This is where we change the overall database version to trigger
 // upgrade checking - don't change this unless you want to trigger
 // database upgrade messages it should be the max of all versions in
 // all database.php files.
-$CFG->dbversion = 201706111750;
+$CFG->dbversion = 201905270930;
 
 // Just turn this off to avoid security holes due to XML parsing
 if ( function_exists ( 'libxml_disable_entity_loader' ) ) libxml_disable_entity_loader();
@@ -44,6 +47,10 @@ if ( isset($CFG->upgrading) && $CFG->upgrading === true ) require_once("upgradin
 if ( ! isset($CFG->vendorroot) ) $CFG->vendorroot = $CFG->wwwroot."/vendor/tsugi/lib/util";
 if ( ! isset($CFG->vendorinclude) ) $CFG->vendorinclude = $CFG->dirroot."/vendor/tsugi/lib/include";
 if ( ! isset($CFG->vendorstatic) ) $CFG->vendorstatic = $CFG->dirroot."/vendor/tsugi/lib/static";
+if ( ! isset($CFG->launchactivity) ) $CFG->launchactivity = false;
+if ( ! isset($CFG->certification) ) $CFG->certification = false;
+
+if ( isset($CFG->staticroot) ) $CFG->staticroot = \Tsugi\Util\U::remove_relative_path($CFG->staticroot);
 
 require_once $CFG->vendorinclude . "/lms_lib.php";
 
@@ -65,22 +72,30 @@ if ( !isset($CFG->owneremail) ) $CFG->owneremail = false;
 if ( !isset($CFG->providekeys) ) $CFG->providekeys = false;
 if ( !isset($CFG->unify) ) $CFG->unify = true;
 
-if ( !isset($CFG->casa_originator_id) ) $CFG->casa_originator_id = md5($CFG->product_instance_guid);
-
 if ( !isset($CFG->apphome) ) $CFG->apphome = $CFG->wwwroot;
 
 if ( !isset($CFG->google_translate) ) $CFG->google_translate = false;
 
-// Certification hacks
-if ( !isset($CFG->require_conformance_parameters) ) $CFG->require_conformance_parameters = false;
-if ( !isset($CFG->prefer_lti1_for_grade_send) ) $CFG->prefer_lti1_for_grade_send = true;
+if ( !isset($CFG->noncecheck) ) $CFG->noncecheck = 100;
+if ( !isset($CFG->noncetime) ) $CFG->noncetime = 1800;
 
-// Set this to the temporary folder if not set - dev only
-if ( ! isset($CFG->dataroot) ) {
-    $tmp = sys_get_temp_dir();
-    if (strlen($tmp) > 1 && substr($tmp, -1) == '/') $tmp = substr($tmp,0,-1);
-    $CFG->dataroot = $tmp;
-}
+// By default we don't record events
+if ( !isset($CFG->eventcheck) ) $CFG->eventcheck = false;
+if ( !isset($CFG->eventtime) ) $CFG->eventtime = 7*24*60*60;
+
+if ( !isset($CFG->git_command) && strtoupper(substr(PHP_OS, 0, 3)) === 'WIN' ) $CFG->git_command = 'git';
+
+// By default we don't push events
+if ( ! isset($CFG->eventpushcount) ) $CFG->eventpushcount = 0;
+if ( ! isset($CFG->eventpushtime) ) $CFG->eventpushtime = 2;
+
+// New fontawesome configuration
+// If you want to stick with 4.7.0 add this to your config.php
+// $CFG->fontawesome = $CFG->staticroot . '/font-awesome-4.7.0'
+if ( ! isset($CFG->fontawesome) ) $CFG->fontawesome = $CFG->staticroot . '/fontawesome-free-5.8.2-web';
+
+// Certification hacks
+if ( !isset($CFG->prefer_lti1_for_grade_send) ) $CFG->prefer_lti1_for_grade_send = true;
 
 error_reporting(E_ALL & ~E_NOTICE);
 error_reporting(E_ALL );
@@ -95,95 +110,53 @@ if ( isset($CFG->sessionlifetime) ) {
 date_default_timezone_set($CFG->timezone);
 
 function htmlpre_utf8($string) {
-    return str_replace("<","&lt;",$string);
+    return U::htmlpre_utf8($string);
 }
 
 function htmlspec_utf8($string) {
-    return htmlspecialchars($string,ENT_QUOTES,$encoding = 'UTF-8');
+    return U::htmlspec_utf8($string);
 }
 
 function htmlent_utf8($string) {
-    return htmlentities($string,ENT_QUOTES,$encoding = 'UTF-8');
+    return U::htmlent_utf8($string);
 }
 
 // Makes sure a string is safe as an href
 function safe_href($string) {
-    return str_replace(array('"', '<'),
-        array('&quot;',''), $string);
+    return U::safe_href($string);
 }
 
 // Convienence method to wrap sha256
 function lti_sha256($val) {
-    return hash('sha256', $val);
+    return U::lti_sha256($val);
 }
 
 // Convienence method to get the local path if we are doing
 function route_get_local_path($dir) {
-    $uri = $_SERVER['REQUEST_URI'];     // /tsugi/lti/some/cool/stuff
-    $root = $_SERVER['DOCUMENT_ROOT'];  // /Applications/MAMP/htdocs
-    $cwd = $dir;                        // /Applications/MAMP/htdocs/tsugi/lti
-    if ( strlen($cwd) < strlen($root) + 1 ) return false;
-    $lwd = substr($cwd,strlen($root));  // /tsugi/lti
-    if ( strlen($uri) < strlen($lwd) + 2 ) return false;
-    $local = substr($uri,strlen($lwd)+1); // some/cool/stuff
-    return $local;
+    return U::route_get_local_path($dir);
 }
 
 function get_request_document() {
-    $uri = $_SERVER['REQUEST_URI'];     // /tsugi/lti/some/cool/stuff
-    $pieces = explode('/',$uri);
-    if ( count($pieces) > 1 ) {
-        $local_path = $pieces[count($pieces)-1];
-        $pos = strpos($local_path,'?');
-        if ( $pos > 0 ) $local_path = substr($local_path,0,$pos);
-        return $local_path;
-    }
-    return false;
+    return U::get_request_document();
 }
 
 function addSession($url) {
-    if ( ini_get('session.use_cookies') != '0' ) return $url;
-    if ( stripos($url, '&'.session_name().'=') > 0 ||
-         stripos($url, '?'.session_name().'=') > 0 ) return $url;
-    $parameter = session_name().'='.session_id();
-    if ( strpos($url, $parameter) !== false ) return $url;
-    $url = $url . (strpos($url,'?') > 0 ? "&" : "?");
-    $url = $url . $parameter;
-    return $url;
+    return U::addSession($url);
 }
 
 function reconstruct_query($baseurl, $newparms=false) {
-    foreach ( $_GET as $k => $v ) {
-        if ( $k == session_name() ) continue;
-        if ( is_array($newparms) && array_key_exists($k, $newparms) ) continue;
-        $baseurl = add_url_parm($baseurl, $k, $v);
-    }
-    if ( is_array($newparms) ) foreach ( $newparms as $k => $v ) {
-        $baseurl = add_url_parm($baseurl, $k, $v);
-    }
-
-    return $baseurl;
+    return U::reconstruct_query($baseurl, $newparms);
 }
 
 function add_url_parm($url, $key, $val) {
-    $url .= strpos($url,'?') === false ? '?' : '&';
-    $url .= urlencode($key) . '=' . urlencode($val);
-    return $url;
+    return U::add_url_parm($url, $key, $val);
 }
 
 // Request headers for earlier version of PHP and nginx
 // http://www.php.net/manual/en/function.getallheaders.php
 if (!function_exists('apache_request_headers')) {
     function apache_request_headers() {
-        foreach($_SERVER as $key=>$value) {
-            if (substr($key,0,5)=="HTTP_") {
-                $key=str_replace(" ","-",ucwords(strtolower(str_replace("_"," ",substr($key,5)))));
-                $out[$key]=$value;
-            } else {
-                $out[$key]=$value;
-            }
-        }
-        return $out;
+        return U::apache_request_headers();
     }
 }
 
@@ -194,75 +167,39 @@ if (!function_exists('http_response_code'))
 {
     function http_response_code($newcode = NULL)
     {
-        static $code = 200;
-        if($newcode !== NULL)
-        {
-            header('X-PHP-Response-Code: '.$newcode, true, $newcode);
-            if(!headers_sent())
-                $code = $newcode;
-        }       
-        return $code;
+        return U::http_response_code($newcode);
     }
 }
 
 // Convience method, pattern borrowed from WordPress
+if (! function_exists('__')) {
 function __($message, $textdomain=false) {
-    global $TSUGI_LOCALE;
-    if ( $TSUGI_LOCALE === null ) return $message;
-    if ( $textdomain === false ) {
-        if ( ! function_exists('gettext')) return $message;
-        return gettext($message);
-    } else {
-        if ( ! function_exists('dgettext')) return $message;
-        return dgettext($textdomain, $message);
-    }
+    return I18N::__($message, $textdomain);
+}
 }
 
 function _e($message, $textdomain=false) {
-    echo(__($message, $textdomain));
+    I18N::_e($message, $textdomain);
 }
 
 function _m($message, $textdomain=false) {
-    return __($message, "master");
+    return I18N::_m($message, $textdomain);
 }
 
 function _me($message, $textdomain=false) {
-    echo(_m($message, $textdomain));
+    I18N::_me($message, $textdomain);
 }
 
-if (function_exists('bindtextdomain')) {
-    bindtextdomain("master", $CFG->dirroot."/locale");
-}
-
-// Set up the user's locale
+// Set up the user's locale - May be overridden later
 $TSUGI_LOCALE = null;
-if ( function_exists('bindtextdomain') && function_exists('textdomain') && isset($_SERVER['HTTP_ACCEPT_LANGUAGE']) ) {
-    $locale = null;
-    if ( class_exists('Locale') ) {
-        try {
-            // Symfony may implement a stub for this function that throws an exception
-            $locale = Locale::acceptFromHttp($_SERVER['HTTP_ACCEPT_LANGUAGE']);
-        } catch (exception $e) { }
-    } 
-    if ($locale === null) { // Crude fallback if we can't use Locale::acceptFromHttp
-        $pieces = explode(',', $_SERVER['HTTP_ACCEPT_LANGUAGE']);
-        $locale = $pieces[0];
-    }
-    putenv('LC_ALL='.$locale);
-    setlocale(LC_ALL, $locale);
-    $domain = $CFG->getScriptFolder();
-    bindtextdomain($domain, $CFG->getScriptPathFull()."/locale");
-    textdomain($domain);
-    $TSUGI_LOCALE = $locale;
-}
+$TSUGI_LOCALE_RELOAD = true;
+I18N::setLocale();
 
 function isCli() {
-     if(php_sapi_name() == 'cli' && empty($_SERVER['REMOTE_ADDR'])) {
-          return true;
-     } else {
-          return false;
-     }
+    return U::isCli();
 }
+
+if ( isset($CFG->verifypeer) && $CFG->verifypeer ) \Tsugi\Util\Net::$VERIFY_PEER = true;
 
 // TODO: Create this as well related to OUTPUT.  See Moodle.
 // global $PAGE;

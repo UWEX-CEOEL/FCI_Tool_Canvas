@@ -1,5 +1,6 @@
 <?php
 
+use \Tsugi\Util\U;
 use \Tsugi\Core\Cache;
 use \Tsugi\Core\LTIX;
 use \Tsugi\Crypt\SecureCookie;
@@ -7,7 +8,7 @@ use \Tsugi\Crypt\SecureCookie;
 // TODO: deal with headers sent...
 function requireLogin() {
     global $CFG, $OUTPUT;
-    if ( ! isset($_SESSION['user_id']) ) {
+    if ( $CFG->google_glient_id && ! isset($_SESSION['user_id']) ) {
         $_SESSION['error'] = 'Login required';
         $OUTPUT->doRedirect($CFG->wwwroot.'/login.php') ;
         exit();
@@ -20,7 +21,7 @@ function isAdmin() {
 
 function requireAdmin() {
     global $CFG, $OUTPUT;
-    if ( $_SESSION['admin'] != 'yes' ) {
+    if ( $CFG->google_glient_id && $_SESSION['admin'] != 'yes' ) {
         $_SESSION['error'] = 'Login required';
         $OUTPUT->doRedirect($CFG->wwwroot.'/login.php') ;
         exit();
@@ -91,9 +92,9 @@ function findAllTools()
     return $tools;
 }
 
-function findAllRegistrations($folders=false)
+function findAllRegistrations($folders=false, $appStore=false)
 {
-    global $CFG;
+    global $CFG, $PDOX;
     // Scan the tools folders for registration settings
     if ( $folders == false ) $folders = $CFG->tool_folders;
     if ( is_string($folders) ) $folders = array($folders);
@@ -106,7 +107,7 @@ function findAllRegistrations($folders=false)
             // Take off the $CFG->dirroot
             $relative = substr($reg_file,strlen($CFG->dirroot)+1);
             $url = $CFG->wwwroot . '/' . $relative;
-            $url = $CFG->removeRelativePath($url);
+            $url = U::remove_relative_path($url);
             $pieces = explode('/', $url);
             if ( $pieces < 2 || $pieces[count($pieces)-1] != 'register.php') {
                 error_log('Unable to load tool registration from '.$tool_folder);
@@ -120,7 +121,12 @@ function findAllRegistrations($folders=false)
 
             if ( isset($REGISTER_LTI2['name']) && isset($REGISTER_LTI2['short_name']) &&
                 isset($REGISTER_LTI2['description']) ) {
-                // We are happy
+                // Valid LTI Registration
+                // If Appstore - Check if the registration is marked as hidden
+                if ($appStore && isset($REGISTER_LTI2['hide_from_store']) && $REGISTER_LTI2['hide_from_store']) {
+                    // Skip hidden app
+                    continue;
+                }
             } else {
                 error_log("Missing required name, short_name, and description in ".$tool_folder);
             }
@@ -128,13 +134,54 @@ function findAllRegistrations($folders=false)
             // Make an icon URL
             $fa_icon = isset($REGISTER_LTI2['FontAwesome']) ? $REGISTER_LTI2['FontAwesome'] : false;
             if ( $fa_icon !== false ) {
-                $REGISTER_LTI2['icon'] = $CFG->staticroot.'/font-awesome-4.4.0/png/'.str_replace('fa-','',$fa_icon).'.png';
+                $REGISTER_LTI2['icon'] = $CFG->fontawesome.'/png/'.str_replace('fa-','',$fa_icon).'.png';
             }
-            $url = str_replace('/register.php','/',$url);
-            $REGISTER_LTI2['url'] = $url;
+            $launch_url = str_replace('/register.php','/',$url);
+            $REGISTER_LTI2['url'] = $launch_url;
+
+            $screen_shots = U::get($REGISTER_LTI2, 'screen_shots');
+            if ( is_array($screen_shots) && count($screen_shots) > 0 ) {
+                $new = array();
+                foreach($screen_shots as $screen_shot ) {
+                    $new[] = str_replace('/register.php','/'.$screen_shot, $url);
+                }
+                $REGISTER_LTI2['screen_shots'] = $new;
+            }
+
             $tools[$key] = $REGISTER_LTI2;
         }
     }
+
+    // Find external applications
+    $stmt = $PDOX->queryReturnError("SELECT * FROM {$CFG->dbprefix}lti_external");
+    $rows = array();
+    if ( $stmt->success ) while ( $row = $stmt->fetch(\PDO::FETCH_ASSOC) ) {
+        array_push($rows, $row);
+    }
+
+    foreach($rows as $row) {
+        // echo("<pre>\n");var_dump($row['json']);echo("</pre>\n");
+        $REGISTER_LTI2 = json_decode($row['json'], true);
+        if ( ! is_array($REGISTER_LTI2) ) $REGISTER_LTI2 = array();
+
+        $REGISTER_LTI2['url'] = $CFG->wwwroot . '/ext/' . $row['endpoint'];
+
+        // Make an icon URL
+        $fa_icon = isset($row['fa_icon']) ? $row['fa_icon'] : false;
+        if ( $fa_icon !== false ) {
+            $REGISTER_LTI2['FontAwesome'] = $fa_icon;
+            $REGISTER_LTI2['icon'] = $CFG->fontawesome.'/png/'.str_replace('fa-','',$fa_icon).'.png';
+        }
+        $REGISTER_LTI2['name'] = $row['name'];
+        $REGISTER_LTI2['short_name'] = $row['name'];
+        $REGISTER_LTI2['description'] = $row['description'];
+
+
+        $key = 'ext-' . $row['endpoint'];
+        $tools[$key] = $REGISTER_LTI2;
+    }
+
+
     return $tools;
 }
 

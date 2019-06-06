@@ -10,18 +10,24 @@ use \Tsugi\UI\CrudForm;
 
 header('Content-Type: text/html; charset=utf-8');
 session_start();
+require_once("../gate.php");
+if ( $REDIRECTED === true || ! isset($_SESSION["admin"]) ) return;
 
-if ( ! ( isset($_SESSION['id']) || isAdmin() ) ) {
-    die('Must be logged in or admin');
+if ( ! isAdmin() ) {
+    die('Must be admin');
 }
 
 $from_location = "keys";
 $tablename = "{$CFG->dbprefix}lti_key";
-if ( isAdmin() ) {
-    $fields = array("key_key", "key_sha256", "secret", "created_at", "updated_at", "user_id");
-} else {
-    $fields = array("key_key", "key_sha256", "secret", "created_at", "updated_at");
-}
+$fields = array('key_key', 'secret', 'deploy_key', 'issuer_id',
+     'caliper_url', 'caliper_key', 'created_at', 'updated_at', 'user_id');
+
+$titles = array(
+    'key_key' => 'LTI 1.1: OAuth Consumer Key',
+    'secret' => 'LTI 1.1: OAuth Consumer Secret',
+    'deploy_key' => 'LTI 1.3: Deployment ID (from the Platform)',
+    'issuer_id' => 'LTI 1.3: Issuer (from this system)',
+);
 
 $retval = CrudForm::handleInsert($tablename, $fields);
 if ( $retval == CrudForm::CRUD_SUCCESS || $retval == CrudForm::CRUD_FAIL ) {
@@ -34,11 +40,56 @@ $OUTPUT->bodyStart();
 $OUTPUT->topNav();
 $OUTPUT->flashMessages();
 
-echo("<h1>Adding Key Entry</h1>\n<p>\n");
+?>
+<h1>Adding Tsugi Tenant/Key</h1>
+<p>
+A single entry in this table defines a "distinct tenant" in Tsugi.
+Data in Tsugi is isolated to a tenant.  You can route both
+LTI 1.1 and LTI 1.3 launches to one tenant by setting fields on
+this entry properly.
+</p>
+<p>
+For LTI 1.1, set the <b>oauth_consumer_key</b> and <b>secret</b>.
+For LTI 1.3, you first need to create or lookup an issuer and note its 
+integer primary key and enter it here (we will make a drop-down UI later).  You also need the
+<b>client_id</b> for this integration from the LMS.
+</p>
+<p>
+To receive both LTI 1.1 and LTI 1.3 launches to this "tenant", simply set all four fields.
+</p>
+<p>
+If this is a pre-existing LTI 1.1 tenant, the LMS must have the <b>oauth_consumer_key</b> 
+and <b>secret</b> connected to its LTI 1.3 launches, and then Tsugi can link the accounts
+and courses regardless of the type of launch.  For this to work, the LMS must support
+LTI Advantage legacy LTI 1.1 support.
+<p>
+<?php
 
-CrudForm::insertForm($fields, $from_location);
+CrudForm::insertForm($fields, $from_location, $titles);
 
-echo("</p>\n");
+?>
+</p>
+<?php
+$OUTPUT->footerStart();
 
-$OUTPUT->footer();
+$sql = "SELECT issuer_id, issuer_key
+        FROM {$CFG->dbprefix}lti_issuer";
+$rows = $PDOX->allRowsDie($sql);
+
+$select_text = "<select id=\"issuer_id_select\"><option value=\"\">No Issuer Selected</option>";
+foreach($rows as $row) {
+    $select_text .= '<option value="'.$row['issuer_id'].'">'.htmlentities($row['issuer_key'])."</option>";
+}
+$select_text .= "</select>";
+?>
+<script>
+$('<?= $select_text ?>').insertBefore('#issuer_id');
+$('#issuer_id').hide();
+$('#issuer_id_select').on('change', function() {
+  $('input[name="issuer_id"]').val(this.value);
+});
+</script>
+
+<?php
+$OUTPUT->footerEnd();
 

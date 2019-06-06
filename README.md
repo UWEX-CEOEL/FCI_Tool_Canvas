@@ -1,8 +1,3 @@
-Flex Check-In Readme:
-=============================================================
-
-This is the primary repository for our Flex Check-In Tool - an external learning tool designed to help Flex Faculty administer the Flex Check-In Assignment to Flex students in order to track student progress. This tool is LMS agnostic. This tool is primarily built on the tsugi platform and leverages the Learning Tools Interoperability standard by IMS Global.
-
 TSUGI - A Framework for Building Interoperable Learning Tools
 =============================================================
 [![Apereo Incubating badge](https://img.shields.io/badge/apereo-incubating-blue.svg?logo=data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAYAAAAfSC3RAAAABmJLR0QA%2FwD%2FAP%2BgvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4QUTEi0ybN9p9wAAAiVJREFUKM9lkstLlGEUxn%2Fv%2B31joou0GTFKyswkKrrYdaEQ4cZAy4VQUS2iqH%2BrdUSNYmK0EM3IkjaChnmZKR0dHS0vpN%2FMe97TIqfMDpzN4XkeDg8%2Fw45R1XNAu%2Fe%2BGTgAqLX2KzAQRVGytLR0jN2jqo9FZFRVvfded66KehH5oKr3dpueiMiK915FRBeXcjo9k9K5zLz%2B3Nz8EyAqX51zdwGMqp738NSonlxf36Cn7zX9b4eYX8gSBAE1Bw9wpLaW%2BL5KWluukYjH31tr71vv%2FU0LJ5xzdL3q5dmLJK7gON5wjEQizsTkFMmeXkbHxtHfD14WkbYQaFZVMzk1zfDHERrPnqGz4wZ1tYfJ5%2FPMLOYYW16ltrqKRDyOMcYATXa7PRayixSc4%2FKFRhrqjxKGIWVlZVQkqpg1pYyvR%2BTFF2s5FFprVVXBAAqq%2F7a9uPKd1NomeTX4HXfrvZ8D2F9dTSwWMjwywueJLxQKBdLfZunue0Mqt8qPyMHf0HRorR0ArtbX1Zkrly7yPNnN1EyafZUVZLJZxjNLlHc%2BIlOxly0RyktC770fDIGX3vuOMAxOt19vJQxD%2BgeHmE6liMVKuNPawlZ9DWu2hG8bW1Tuib0LgqCrCMBDEckWAVjKLetMOq2ZhQV1zulGVFAnohv5wrSq3tpNzwMR%2BSQi%2FyEnIl5Ehpxzt4t6s9McRdGpIChpM8Y3ATXbkKdEZDAIgqQxZrKo%2FQUk5F9Xr20TrQAAAABJRU5ErkJggg%3D%3D)](https://www.apereo.org/content/projects-currently-incubation)
@@ -27,7 +22,7 @@ are now moved to separate repositories (see below).
 Pre-Requisites
 --------------
 
-* [Install GIT] (docs/GITHUB.md) so that it works at the command prompt.
+* [Install GIT](https://www.tsugi.org/md/GITHUB.md) so that it works at the command prompt.
 
 * Install a PHP/MySQL Environment like XAMPP / MAMP following the
 instructions at:
@@ -42,7 +37,8 @@ your web server can read it
 
         git clone https://github.com/tsugiproject/tsugi.git
 
-* Create a database and get authentication info for the database
+* Create a database and get authentication info for the database (MySQL 8.0
+will need different commands):
 
         CREATE DATABASE tsugi DEFAULT CHARACTER SET utf8;
         GRANT ALL ON tsugi.* TO 'ltiuser'@'localhost' IDENTIFIED BY 'ltipassword';
@@ -122,7 +118,7 @@ and Applications.
 * [Tsugi Static Content](https://github.com/tsugiproject/tsugi-static) - This repository contains
 JavaScript, images, and CSS files shared across the various Tsugi implementations
 (PHP, Java, and NodeJS).  The static content is available at 
-http://www.dr-chuck.net/tsugi-static/ - if you like you can check out your own copy
+https://static.tsugi.org/ - if you like you can check out your own copy
 of this repo locally or for your production environment and point your Tsugi `config.php`
 at your own copy of the library.
 
@@ -145,4 +141,5 @@ Tsugi Developer List
 Please join the 
 [Tsugi Developer List](https://groups.google.com/a/apereo.org/forum/#!forum/tsugi-dev)
 so you can stay up to date with the progress regarding Tsugi.
+
 

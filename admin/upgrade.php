@@ -1,14 +1,28 @@
 <?php
+
+use \Tsugi\Util\U;
+use \Tsugi\Core\LTIX;
+
 if ( ! defined('COOKIE_SESSION') ) define('COOKIE_SESSION', true);
 require_once("../config.php");
-session_start();
-require_once("gate.php");
 require_once("admin_util.php");
-if ( $REDIRECTED === true || ! isset($_SESSION["admin"]) ) return;
 
-use \Tsugi\Core\LTIX;
+if ( ! U::isCli() ) {
+    session_start();
+    require_once("gate.php");
+    if ( $REDIRECTED === true || ! isset($_SESSION["admin"]) ) return;
+
+    // https://stackoverflow.com/questions/3133209/how-to-flush-output-after-each-echo-call
+    @ini_set('zlib.output_compression',0);
+    @ini_set('implicit_flush',1);
+    @ob_end_clean();
+    set_time_limit(0);
+}
+
 LTIX::getConnection();
 
+
+if ( ! U::isCli() ) {
 ?>
 <html>
 <head>
@@ -16,6 +30,7 @@ LTIX::getConnection();
 </head>
 <body>
 <?php
+}
 
 $p = $CFG->dbprefix;
 echo("Checking plugins table...<br/>\n");
@@ -75,6 +90,7 @@ foreach($tools as $tool ) {
     unset($DATABASE_UPGRADE);
     require($tool);
     require('migrate-run.php');
+    flush();
 }
 
 echo("\n<br/>Highest database version=$maxversion in $maxpath<br/>\n");
@@ -94,7 +110,6 @@ if ( $maxversion > $CFG->dbversion ) {
     if ( ! $q->success ) die("Unable to update overall version ".$q->errorimplode."<br/>".$entry[1] );
 }
 
-?>
-</body>
-</html>
-
+if( ! U::isCli() ) {
+    echo("\n</body>\n</html>\n");
+}

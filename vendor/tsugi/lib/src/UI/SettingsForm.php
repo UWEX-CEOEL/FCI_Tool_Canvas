@@ -6,10 +6,31 @@ namespace Tsugi\UI;
  * A series of routines used to generate and process the settings forms.
  */
 
+use \Tsugi\Util\U;
 use \Tsugi\Core\Settings;
 use \Tsugi\Core\LTIX;
 
 class SettingsForm {
+
+    /**
+     * Check for incoming settings post data
+     *
+     * @return boolean Returns true if there were settings to handle and false
+     * if there was nothing done.  Generally the calling tool will redirect
+     * when true is returned.
+     *
+     *     if ( SettingsForm::isSettingsPost() ) {
+     *         // Do form validation if you like
+     *         SettingsForm::handleSettingsPost();
+     *         header( 'Location: '.U::addSession('index.php?howdysuppress=1') ) ;
+     *         return;
+     *     }
+     */
+    public static function isSettingsPost() {
+        global $USER;
+        if ( ! $USER ) return false;
+        return ( isset($_POST['settings_internal_post']) && $USER->instructor );
+    }
 
     /**
      * Handle incoming settings post data
@@ -18,19 +39,21 @@ class SettingsForm {
      * if there was nothing done.  Generally the calling tool will redirect
      * when true is returned.
      *
-     *     if ( $OUTPUT->handleSettingsPost() ) {
-     *         header( 'Location: '.addSession('index.php?howdysuppress=1') ) ;
+     *     if ( SettingsForm::handleSettingsPost() ) {
+     *         header( 'Location: '.U::addSession('index.php?howdysuppress=1') ) ;
      *         return;
      *     }
      */
     public static function handleSettingsPost() {
         global $USER;
+        if ( ! $USER ) return false;
 
         if ( isset($_POST['settings_internal_post']) && $USER->instructor ) {
             $newsettings = array();
             foreach ( $_POST as $k => $v ) {
                 if ( $k == session_name() ) continue;
                 if ( $k == 'settings_internal_post' ) continue;
+                if ( strpos('_ignore',$k) > 0 ) continue;
                 $newsettings[$k] = $v;
             }
 
@@ -50,6 +73,7 @@ class SettingsForm {
     public static function button($right = false)
     {
         global $LINK;
+        if ( ! $LINK ) return;
         if ( $right ) echo('<span style="position: fixed; right: 10px; top: 5px;">');
         echo('<button onclick="showModal(\''.__('Configure').' '.htmlentities($LINK->title).'\',\'settings\'); return false;" type="button" class="btn btn-default">');
         echo('<span class="glyphicon glyphicon-pencil"></span></button>'."\n");
@@ -57,7 +81,8 @@ class SettingsForm {
     }
 
     public static function start() {
-        global $USER, $LINK, $OUTPUT;
+        global $USER, $OUTPUT;
+        if ( ! $USER ) return;
 ?>
 <div id="settings" title="Settings" style="display: none;"> <!-- model -->
       <?php if ( $USER->instructor ) { ?>
@@ -77,15 +102,13 @@ class SettingsForm {
      */
     public static function end() {
         global $USER;
+        if ( ! $USER ) return;
 ?>
       </div><!-- / modal-body -->
-      <div> <!-- modal-footer -->
-        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-        <?php if ( $USER->instructor ) { ?>
-        <button type="button" id="settings_save" onclick="submit();" class="btn btn-primary">Save changes</button>
-        <?php } ?>
-      </div><!-- / .modal-footer -->
     <?php if ( $USER->instructor ) { ?>
+      <div> <!-- modal-footer -->
+        <button type="button" id="settings_save" onclick="submit();" class="btn btn-primary"><?= _m("Save changes") ?></button>
+      </div><!-- / .modal-footer -->
     </form>
     <?php } ?>
 </div><!-- /.modal -->
@@ -98,6 +121,7 @@ class SettingsForm {
     public static function select($name, $default=false, $fields)
     {
         global $USER;
+        if ( ! $USER ) return;
         $oldsettings = Settings::linkGetAll();
         if ( ! $USER->instructor ) {
             $configured = false;
@@ -111,9 +135,9 @@ class SettingsForm {
                 }
             }
             if ( $configured === false ) {
-                echo('<p>Setting '.htmlent_utf8($name).' is not set</p>');
+                echo('<p>'._m('Setting').' '.htmlent_utf8($name).' '._m('is not set').'</p>');
             } else {
-                echo('<p>'.htmlent_utf8(ucwords($name)).' is set to '.htmlent_utf8($configured).'</p>');
+                echo('<p>'.htmlent_utf8(ucwords($name)).' '._m('is set to').' '.htmlent_utf8($configured).'</p>');
             }
             return;
         }
@@ -142,14 +166,16 @@ class SettingsForm {
     public static function text($name, $title=false)
     {
         global $USER;
+        if ( ! $USER ) return false;
+
         $oldsettings = Settings::linkGetAll();
         $configured = isset($oldsettings[$name]) ? $oldsettings[$name] : false;
         if ( $title === false ) $title = $name;
         if ( ! $USER->instructor ) {
-            if ( $configured === false ) {
-                echo('<p>Setting '.htmlent_utf8($name).' is not set</p>');
+            if ( $configured === false || strlen($configured) < 1 ) {
+                echo('<p>'._m('Setting').' '.htmlent_utf8($name).' '._m('is not set').'</p>');
             } else {
-                echo('<p>'.htmlent_utf8(ucwords($name)).' is set to '.htmlent_utf8($configured).'</p>');
+                echo('<p>'.htmlent_utf8(ucwords($name)).' '._m('is set to').' '.htmlent_utf8($configured).'</p>');
             }
             return;
         }
@@ -160,6 +186,75 @@ class SettingsForm {
         echo('value="'.htmlent_utf8($configured).'"></label>'."\n");
     }
 
+    /**
+     * Handle a settings textarea box
+     */
+    public static function textarea($name, $title=false)
+    {
+        global $USER;
+        if ( ! $USER ) return false;
+        $oldsettings = Settings::linkGetAll();
+        $configured = isset($oldsettings[$name]) ? $oldsettings[$name] : false;
+        if ( $title === false ) $title = $name;
+        if ( ! $USER->instructor ) {
+            if ( $configured === false ) {
+                echo('<p>'._m('Setting').' '.htmlent_utf8($name).' '._m('is not set').'</p>');
+            } else {
+                echo('<p>'.htmlent_utf8(ucwords($name)).' '._m('is set to').' '.htmlent_utf8($configured).'</p>');
+            }
+            return;
+        }
+
+        // Instructor view
+        echo('<label style="width:100%;" for="'.$name.'">'.htmlent_utf8($title)."\n");
+        echo('<textarea class="form-control" style="width:100%;" name="'.$name.'">'."\n");
+        echo(htmlent_utf8($configured)."\n");
+        echo("</textarea>\n");
+    }
+
+    /**
+     * Handle a settings checkbox
+     */
+    public static function checkbox($name, $title=false)
+    {
+        global $USER;
+        if ( ! $USER ) return false;
+        $oldsettings = Settings::linkGetAll();
+        $configured = isset($oldsettings[$name]) ? $oldsettings[$name] : false;
+        if ( $title === false ) $title = $name;
+        if ( ! $USER->instructor ) {
+            if ( $configured === false ) {
+                echo('<p>'._m('Setting').' '.htmlent_utf8($name).' '._m('is not set').'</p>');
+            } else {
+                echo('<p>'.htmlent_utf8(ucwords($name)).' is set to '.htmlent_utf8($configured).'</p>');
+            }
+            return;
+        }
+
+        // Instructor view
+        echo('<input type="checkbox" class="ZZ-form-control" value="1" name="'.$name.'"');
+        if ( $configured == 1 ) {
+            echo(' checked ');
+            echo("onclick=\"if(this.checked) document.getElementById('");
+            echo($name);
+            echo(".mirror').name = '");
+            echo($name);
+            echo(".ignore'; else document.getElementById('");
+            echo($name);
+            echo(".mirror').name = '");
+            echo($name);
+            echo("';\"");
+        }
+        echo("/>\n");
+        echo('<label for="'.$name.'">'.htmlent_utf8($title)."</label><br/>\n");
+        if ( $configured == 1 ) {
+            echo("<input type=\"hidden\" name=\"");
+            echo($name);
+            echo(".ignore\" id=\"");
+            echo($name);
+            echo(".mirror\" value=\"0\" />");
+        }
+    }
     /**
       * Get the due data data in an object
       */
@@ -191,12 +286,11 @@ class SettingsForm {
         $penalty_time = Settings::linkGet('penalty_time') ? Settings::linkGet('penalty_time') + 0 : 24*60*60;
         $penalty_cost = Settings::linkGet('penalty_cost') ? Settings::linkGet('penalty_cost') + 0.0 : 0.2;
 
-        $r = "Once the due date has passed your score will be reduced by ".htmlent_utf8($penalty_cost*100);
-        $r .= " percent and each \n";
-        $r .= htmlent_utf8(self::getDueDateDelta($penalty_time));
-        $r .= " after the due date, your score will be further reduced by ".htmlent_utf8($penalty_cost*100);
-        $r .= " percent.</p>";
-        $retval->penaltyinfo = $r;
+        $retval->penaltyinfo = sprintf(_m("Once the due date has passed your 
+            score will be reduced by %f percent and each %s after the due date, 
+            your score will be further reduced by %s percent."),
+                htmlent_utf8($penalty_cost*100), htmlent_utf8(self::getDueDateDelta($penalty_time)),
+                htmlent_utf8($penalty_cost*100) );
 
         //  If it is just a date - add nearly an entire day of time...
         if ( strlen($duedatestr) <= 10 ) $duedate = $duedate + 24*60*60 - 1;
@@ -214,9 +308,9 @@ class SettingsForm {
             $retval->penalty = $penalty;
             $retval->dayspastdue = $diff / (24*60*60);
             $retval->percent = intval($penalty * 100);
-            $retval->message = 'It is currently '.self::getDueDateDelta($diff)."\n".
-                'past the due date ('.htmlentities($duedatestr).') so your late penalty '.
-                'is '.$retval->percent." percent.\n";
+            $retval->message = sprintf(
+                _m("It is currently %s past the due date (%s) so your late penalty is %f percent."),
+                self::getDueDateDelta($diff), htmlentities($duedatestr),$retval->percent);
         }
         return $retval;
     }
@@ -229,11 +323,11 @@ class SettingsForm {
         if ( $time < 600 ) {
             $delta = $time . ' seconds';
         } else if ($time < 3600) {
-            $delta = sprintf("%0.0f",($time/60.0)) . ' minutes';
+            $delta = sprintf("%0.0f",($time/60.0)) . ' ' . _m('minutes');
         } else if ($time <= 86400 ) {
-            $delta = sprintf("%0.2f",($time/3600.0)) . ' hours';
+            $delta = sprintf("%0.2f",($time/3600.0)) . ' ' . _m('hours');
         } else {
-            $delta = sprintf("%0.2f",($time/86400.0)) . ' days';
+            $delta = sprintf("%0.2f",($time/86400.0)) . ' ' . _m('days');
         }
         return $delta;
     }
@@ -244,6 +338,7 @@ class SettingsForm {
     public static function dueDate()
     {
         global $USER;
+        if ( ! $USER ) return false;
         $due = Settings::linkGet('due', '');
         $timezone = Settings::linkGet('timezone', 'Pacific/Honolulu');
         $time = Settings::linkGet('penalty_time', 86400);
@@ -251,11 +346,11 @@ class SettingsForm {
 
         if ( ! $USER->instructor ) {
             if ( strlen($due) < 1 ) {
-                echo("<p>There is currently no due date/time for this assignment.</p>\n");
+                echo("<p>"._m("There is currently no due date/time for this assignment.")."</p>\n");
                 return;
             }
             $dueDate = self::getDueDate();
-            echo("<p>Due date: ".htmlent_utf8($due)."</p>\n");
+            echo("<p>"._m("Due date: ").htmlent_utf8($due)."</p>\n");
             echo("<p>".$dueDate->penaltyinfo."</p>\n");
             if ( $dueDate->message ) {
                 echo('<p style="color:red;">'.$dueDate->message.'</p>'."\n");
@@ -264,22 +359,22 @@ class SettingsForm {
         }
 ?>
         <label for="due">
-            Please enter a due date in ISO 8601 format (2015-01-30T20:30) or leave blank for no due date.
-            You can leave off the time to allow the assignment to be turned in any time during the day.<br/>
+            <?= _m("Please enter a due date in ISO 8601 format (2015-01-30T20:30) or leave blank for no due date.
+            You can leave off the time to allow the assignment to be turned in any time during the day.") ?><br/>
         <input type="text" class="form-control" value="<?php echo(htmlspec_utf8($due)); ?>" name="due"></label>
         <label for="timezone">
-            Please enter a valid PHP Time Zone like 'Pacific/Honolulu' (default).  If you are
+            <?= _m("Please enter a valid PHP Time Zone like 'Pacific/Honolulu' (default).  If you are
             teaching in many time zones around the world, 'Pacific/Honolulu' is a good time
-            zone to choose - this is why it is the default.<br/>
+            zone to choose - this is why it is the default.") ?><br/>
         <input type="text" class="form-control" value="<?php echo(htmlspec_utf8($timezone)); ?>" name="timezone"></label>
-            <p>The next two fields determine the "overall penalty" for being late.  We define a time period
+            <p><?= _m("The next two fields determine the 'overall penalty' for being late.  We define a time period
             (in seconds) and a fractional penalty per time period.  The penalty is assessed for each
             full or partial time period past the due date.  For example to deduct 20% per day, you would
-            set the period to be 86400 (24*60*60) and the penalty to be 0.2.
+            set the period to be 86400 (24*60*60) and the penalty to be 0.2.") ?>
             </p>
-        <label for="penalty_time">Please enter the penalty time period in seconds.<br/>
+        <label for="penalty_time"><?= _m("Please enter the penalty time period in seconds.") ?><br/>
         <input type="text" class="form-control" value="<?php echo(htmlspec_utf8($time)); ?>" name="penalty_time"></label>
-        <label for="penalty_cost">Please enter the penalty deduction as a decimal between 0.0 and 1.0.<br/>
+        <label for="penalty_cost"><?= _m("Please enter the penalty deduction as a decimal between 0.0 and 1.0.") ?><br/>
         <input type="text" class="form-control" value="<?php echo(htmlspec_utf8($cost)); ?>" name="penalty_cost"></label>
 <?php
     }
@@ -290,6 +385,7 @@ class SettingsForm {
     public static function done()
     {
         global $USER;
+        if ( ! $USER ) return false;
 /*
         return; // Deprecated
         if ( ! $USER->instructor ) return;

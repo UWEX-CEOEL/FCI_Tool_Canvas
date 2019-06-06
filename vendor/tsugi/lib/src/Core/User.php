@@ -18,8 +18,14 @@ use \Tsugi\Core\Cache;
 
 class User {
 
-    // TODO: - $User->lang - The user's language choice.
+    // Needed to implement the Entity methods
+    protected $TABLE_NAME = "lti_user";
+    protected $PRIMARY_KEY = "user_id";
 
+    // Links have settings...
+    protected $ENTITY_NAME = "user";
+    use JsonTrait;  // Pull in the trait
+ 
     /**
      * The integer primary key for this user in the 'lti_user' table.
      */
@@ -28,27 +34,37 @@ class User {
     /**
      * The user's email
      */
-    public $email = false;
+    public $email = null;
 
     /**
      * The user's display name
      */
-    public $displayname = false;
+    public $displayname = null;
 
     /**
      * The user's first name
      */
-    public $firstname = false;
+    public $firstname = null;
 
     /**
      * The user's last name
      */
-    public $lastname = false;
+    public $lastname = null;
+
+    /**
+     * The User's Locale
+     */
+    public $locale = null;
+
+    /**
+     * The User's Image / Avatar
+     */
+    public $image = null;
 
     /**
      * Is the user an instructor?
      */
-    public $instructor = false;
+    public $instructor = null;
 
     /**
      * Construct the user's name / email combination 
@@ -74,12 +90,12 @@ class User {
     /**
      * Get the user's first name, falling back to email
      */
-    function getFirstName($displayname=false) {
-        if ( $displayname === false ) $displayname = $this->getNameAndEmail();
-        if ( $displayname === false ) return false;
+    function getFirstName($displayname=null) {
+        if ( $displayname === null ) $displayname = $this->getNameAndEmail();
+        if ( $displayname === null ) return null;
         $pieces = explode(' ',$displayname);
         if ( count($pieces) > 0 ) return $pieces[0];
-        return false;
+        return null;
     }
 
     /**

@@ -9,13 +9,13 @@ class GradeUtil {
     public static function gradeLoadAll() {
         global $CFG, $USER, $LINK, $PDOX;
         $LAUNCH = LTIX::requireData(LTIX::LINK);
-        if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
+        if ( ! $USER->instructor ) die("Requires instructor role");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
         $stmt = $PDOX->queryDie(
             "SELECT R.result_id AS result_id, R.user_id AS user_id,
-                grade, note, R.json AS json, R.updated_at AS updated_at, displayname, email
+                grade, note, R.json AS json, R.note as note, R.updated_at AS updated_at, displayname, email
             FROM {$p}lti_result AS R
             JOIN {$p}lti_user AS U ON R.user_id = U.user_id
             WHERE R.link_id = :LID
@@ -49,14 +49,14 @@ class GradeUtil {
     public static function gradeLoad($user_id=false) {
         global $CFG, $USER, $LINK, $PDOX;
         $LAUNCH = LTIX::requireData(array(LTIX::LINK, LTIX::USER));
-        if ( ! $USER->instructor && ! $USER->ASC && $user_id !== false ) die("Requires instructor or ASC role");
+        if ( ! $USER->instructor && $user_id !== false ) die("Requires instructor role");
         if ( $user_id == false ) $user_id = $USER->id;
         $p = $CFG->dbprefix;
 
         // Get basic grade data
         $stmt = $PDOX->queryDie(
             "SELECT R.result_id AS result_id, R.user_id AS user_id,
-                grade, note, R.json AS json, R.updated_at AS updated_at, displayname, email
+                grade, note, R.json AS json, R.note as note, R.updated_at AS updated_at, displayname, email
             FROM {$p}lti_result AS R
             JOIN {$p}lti_user AS U ON R.user_id = U.user_id
             WHERE R.link_id = :LID AND R.user_id = :UID
@@ -68,13 +68,12 @@ class GradeUtil {
     }
 
     public static function gradeShowInfo($row) {
-        //echo('<p><a href="grades.php" class="btn btn-info" style="margin-left: 5%;">Back to All Grades</a></p>');
-        echo("<div style=\"text-align: center;\">");
-        echo("<div style=\"display: inline-block; text-align: left\">\n");
+        echo('<p><a href="grades.php">Back to All Grades</a>'."</p><p>\n");
         echo("User Name: ".htmlent_utf8($row['displayname'])."<br/>\n");
         echo("User Email: ".htmlent_utf8($row['email'])."<br/>\n");
         echo("Last Submision: ".htmlent_utf8($row['updated_at'])."<br/>\n");
-        echo("</div></div>\n");
+        echo("Score: ".htmlent_utf8($row['grade'])."<br/>\n");
+        echo("</p>\n");
     }
 
     // newdata can be a string or array (preferred)
