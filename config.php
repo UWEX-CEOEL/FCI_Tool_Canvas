@@ -59,17 +59,17 @@ unset($apphome);
 // $CFG->websocket_url = 'wss://socket.tsugicloud.org:443'; // Production
 
 // If you are running a reverse proxy (proxy_wstunnel) set this to the port
-// you will forward to in your apache config  
+// you will forward to in your apache config
 // $CFG->websocket_proxyport = 8080;
 
 // Database connection information to configure the PDO connection
 // You need to point this at a database with am account and password
 // that can create tables.   To make the initial tables go into Admin
 // to run the upgrade.php script which auto-creates the tables.
-$CFG->pdo       = 'mysql:host=127.0.0.1;dbname=tsugi';
-// $CFG->pdo       = 'mysql:host=127.0.0.1;port=8889;dbname=tsugi'; // MAMP
-$CFG->dbuser    = 'ltiuser';
-$CFG->dbpass    = 'ltipassword';
+// $CFG->pdo       = 'mysql:host=127.0.0.1;dbname=tsugithird';
+$CFG->pdo       = 'mysql:host=127.0.0.1;port=8889;dbname=tsugithird'; // MAMP
+$CFG->dbuser    = 'root';
+$CFG->dbpass    = 'root';
 
 // These URLs are used in your app store, they are optional but
 // strongly recommended - you can borrow from the samples below
@@ -171,7 +171,7 @@ $CFG->autoapprovekeys = false; // A regex like - '/.+@gmail\\.com/'
 // get the key and secret, and put them here:
 $CFG->google_client_id = false; // '96041-nljpjj8jlv4.apps.googleusercontent.com';
 $CFG->google_client_secret = false; // '6Q7w_x4ESrl29a';
-$CFG->google_translate = false; 
+$CFG->google_translate = false;
 
 // Alpha: Google Classroom support
 // First, Go to https://console.developers.google.com/apis/credentials
