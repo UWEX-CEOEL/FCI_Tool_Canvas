@@ -670,7 +670,7 @@ class LTIX {
             u.subscribe AS subscribe, u.user_sha256 AS user_sha256,
             m.membership_id, m.role, m.role_override,
             r.result_id, r.grade, r.result_url, r.sourcedid";
-        
+
         if ( $profile_table ) {
             $sql .= ",
             p.profile_id, p.displayname AS profile_displayname, p.email AS profile_email,
@@ -727,10 +727,12 @@ class LTIX {
         $sql .= "
             LIMIT 1\n";
 
+        // ContentItem does not neet link_id
+        if ( ! isset($post['link_id']) ) $post['link_id'] = null;
         $parms = array(
             ':key' => lti_sha256($post['key']),
             ':nonce' => substr($post['nonce'],0,128),
-            ':context' => lti_sha256($post['context_id']),
+            ':context' => $_POST['custom_canvas_section_id'],
             ':link' => lti_sha256($post['link_id']),
             ':user' => lti_sha256($post['user_id']));
 
@@ -771,43 +773,59 @@ class LTIX {
 
         $actions = array();
         // if we didn't get context_id from post, we can't update lti_context!
-        if ( $row['context_id'] === null && isset($post['context_id']) ) {
-            $sql = "INSERT INTO {$p}lti_context
-                ( context_key, context_sha256, settings_url, title, key_id, created_at, updated_at ) VALUES
-                ( :context_key, :context_sha256, :settings_url, :title, :key_id, NOW(), NOW() )";
-            $PDOX->queryDie($sql, array(
-                ':context_key' => $post['context_id'],
-                ':context_sha256' => lti_sha256($post['context_id']),
-                ':settings_url' => $post['context_settings_url'],
-                ':title' => $post['context_title'],
-                ':key_id' => $row['key_id']));
-            $row['context_id'] = $PDOX->lastInsertId();
-            $row['context_title'] = $post['context_title'];
-            $row['context_settings_url'] = $post['context_settings_url'];
-            $actions[] = "=== Inserted context id=".$row['context_id']." ".$row['context_title'];
+
+        $sql = "SELECT context_id, context_key FROM lti_context WHERE context_key = :contextKey";
+        $rowCheck = $PDOX->rowDie($sql, array(':contextKey' => $_POST['custom_canvas_section_id']));
+
+        if (!isset($rowCheck['context_key']) || $rowCheck['context_key'] == null) {
+               // if ( $row['context_key'] === null && $_POST['custom_canvas_section_id']) {
+            if ( isset($_POST['custom_canvas_section_id']) && $row['context_key'] != $_POST['custom_canvas_section_id']) {
+                $sql = "INSERT INTO {$p}lti_context
+                    ( context_key, context_sha256, settings_url, title, json, created_at, updated_at ) VALUES
+                    ( :context_key, :context_sha256, :settings_url, :title, :json, NOW(), NOW() )";
+                $PDOX->queryDie($sql, array(
+                    ':context_key' => $_POST['custom_canvas_section_id'],
+                    ':context_sha256' => lti_sha256($post['context_id']),
+                    ':settings_url' => $post['context_settings_url'],
+                    ':title' => $post['context_title'],
+                    ':json' => $row['context_key']));
+                $row['context_id'] = $PDOX->lastInsertId();
+                $row['context_title'] = $post['context_title'];
+                $row['context_settings_url'] = U::get($post, 'context_settings_url', null);
+                $actions[] = "=== Inserted context id=".$row['context_id']." ".$row['context_title'];
+            }
+        } else {
+              $row['context_id'] = $rowCheck['context_id'];
         }
 
         // if we didn't get context_id from post, we can't update lti_link either
-        if ( $row['link_id'] === null && $row['context_id'] !== null && isset($post['link_id']) ) {
-            $sql = "INSERT INTO {$p}lti_link
-                ( link_key, link_sha256, settings_url, title, context_id, path, created_at, updated_at ) VALUES
-                    ( :link_key, :link_sha256, :settings_url, :title, :context_id, :path, NOW(), NOW() )";
-            $PDOX->queryDie($sql, array(
-                ':link_key' => $post['link_id'],
-                ':link_sha256' => lti_sha256($post['link_id']),
-                ':settings_url' => $post['link_settings_url'],
-                ':title' => $post['link_title'],
-                ':context_id' => $row['context_id'],
-                ':path' => $post['link_path'],
-            ));
-            $row['link_id'] = $PDOX->lastInsertId();
-            $row['link_title'] = $post['link_title'];
-            $row['link_settings_url'] = $post['link_settings_url'];
-            $row['link_path'] = $post['link_path'];
-            $actions[] = "=== Inserted link id=".$row['link_id']." ".$row['link_title'];
-        }
+        $sql = "SELECT link_id FROM lti_link WHERE context_id = :currentContext";
+        $rowCheck2 = $PDOX->rowDie($sql, array(':currentContext' => $row['context_id']));
 
-        
+        if (!isset($rowCheck2['link_id']) || $rowCheck2['link_id'] == null) {
+
+            // if we didn't get context_id from post, we can't update lti_link either
+            if ( $row['link_id'] === null && $row['context_id'] !== null && isset($post['link_id']) ) {
+                $sql = "INSERT INTO {$p}lti_link
+                    ( link_key, link_sha256, settings_url, title, context_id, path, created_at, updated_at ) VALUES
+                        ( :link_key, :link_sha256, :settings_url, :title, :context_id, :path, NOW(), NOW() )";
+                $PDOX->queryDie($sql, array(``
+                    ':link_key' => $post['link_id'],
+                    ':link_sha256' => lti_sha256($post['link_id']),
+                    ':settings_url' => $post['link_settings_url'],
+                    ':title' => $post['link_title'],
+                    ':context_id' => $row['context_id'],
+                    ':path' => $post['link_path']
+                ));
+                $row['link_id'] = $PDOX->lastInsertId();
+                $row['link_title'] = $post['link_title'];
+                $row['link_settings_url'] = $post['link_settings_url'];
+                $row['link_path'] = $post['link_path'];
+                $actions[] = "=== Inserted link id=".$row['link_id']." ".$row['link_title'];
+            }
+          }
+
+
         $user_displayname = isset($post['user_displayname']) ? $post['user_displayname'] : null;
         $user_email = isset($post['user_email']) ? $post['user_email'] : null;
         $lms_defined_id = isset($request_data['ext_d2l_orgdefinedid']) ? $request_data['ext_d2l_orgdefinedid'] : null;
@@ -958,7 +976,7 @@ class LTIX {
 */
 
   }
-        
+
         // Grab the context scoped service URLs...
         $context_services = array('ext_memberships_id', 'ext_memberships_url', 'lineitems_url', 'memberships_url');
         if ( isset($row['context_id']) ) {
