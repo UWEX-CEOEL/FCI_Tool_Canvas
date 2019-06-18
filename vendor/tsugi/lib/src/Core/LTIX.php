@@ -774,56 +774,41 @@ class LTIX {
         $actions = array();
         // if we didn't get context_id from post, we can't update lti_context!
 
-        $sql = "SELECT context_id, context_key FROM lti_context WHERE context_key = :contextKey";
-        $rowCheck = $PDOX->rowDie($sql, array(':contextKey' => $_POST['custom_canvas_section_id']));
-
-        if (!isset($rowCheck['context_key']) || $rowCheck['context_key'] == null) {
-               // if ( $row['context_key'] === null && $_POST['custom_canvas_section_id']) {
-            if ( isset($_POST['custom_canvas_section_id']) && $row['context_key'] != $_POST['custom_canvas_section_id']) {
-                $sql = "INSERT INTO {$p}lti_context
-                    ( context_key, context_sha256, settings_url, title, json, created_at, updated_at ) VALUES
-                    ( :context_key, :context_sha256, :settings_url, :title, :json, NOW(), NOW() )";
-                $PDOX->queryDie($sql, array(
-                    ':context_key' => $_POST['custom_canvas_section_id'],
-                    ':context_sha256' => lti_sha256($post['context_id']),
-                    ':settings_url' => $post['context_settings_url'],
-                    ':title' => $post['context_title'],
-                    ':json' => $row['context_key']));
-                $row['context_id'] = $PDOX->lastInsertId();
-                $row['context_title'] = $post['context_title'];
-                $row['context_settings_url'] = U::get($post, 'context_settings_url', null);
-                $actions[] = "=== Inserted context id=".$row['context_id']." ".$row['context_title'];
-            }
-        } else {
-              $row['context_id'] = $rowCheck['context_id'];
+        if ( $row['context_id'] === null && isset($post['context_id']) ) {
+            $sql = "INSERT INTO {$p}lti_context
+                ( context_key, context_sha256, settings_url, title, key_id, created_at, updated_at ) VALUES
+                ( :context_key, :context_sha256, :settings_url, :title, :key_id, NOW(), NOW() )";
+            $PDOX->queryDie($sql, array(
+                ':context_key' => $post['context_id'],
+                ':context_sha256' => lti_sha256($post['context_id']),
+                ':settings_url' => $post['context_settings_url'],
+                ':title' => $post['context_title'],
+                ':key_id' => $row['key_id']));
+            $row['context_id'] = $PDOX->lastInsertId();
+            $row['context_title'] = $post['context_title'];
+            $row['context_settings_url'] = $post['context_settings_url'];
+            $actions[] = "=== Inserted context id=".$row['context_id']." ".$row['context_title'];
         }
 
         // if we didn't get context_id from post, we can't update lti_link either
-        $sql = "SELECT link_id FROM lti_link WHERE context_id = :currentContext";
-        $rowCheck2 = $PDOX->rowDie($sql, array(':currentContext' => $row['context_id']));
-
-        if (!isset($rowCheck2['link_id']) || $rowCheck2['link_id'] == null) {
-
-            // if we didn't get context_id from post, we can't update lti_link either
-            if ( $row['link_id'] === null && $row['context_id'] !== null && isset($post['link_id']) ) {
-                $sql = "INSERT INTO {$p}lti_link
-                    ( link_key, link_sha256, settings_url, title, context_id, path, created_at, updated_at ) VALUES
-                        ( :link_key, :link_sha256, :settings_url, :title, :context_id, :path, NOW(), NOW() )";
-                $PDOX->queryDie($sql, array(``
-                    ':link_key' => $post['link_id'],
-                    ':link_sha256' => lti_sha256($post['link_id']),
-                    ':settings_url' => $post['link_settings_url'],
-                    ':title' => $post['link_title'],
-                    ':context_id' => $row['context_id'],
-                    ':path' => $post['link_path']
-                ));
-                $row['link_id'] = $PDOX->lastInsertId();
-                $row['link_title'] = $post['link_title'];
-                $row['link_settings_url'] = $post['link_settings_url'];
-                $row['link_path'] = $post['link_path'];
-                $actions[] = "=== Inserted link id=".$row['link_id']." ".$row['link_title'];
-            }
-          }
+        if ( $row['link_id'] === null && $row['context_id'] !== null && isset($post['link_id']) ) {
+            $sql = "INSERT INTO {$p}lti_link
+                ( link_key, link_sha256, settings_url, title, context_id, path, created_at, updated_at ) VALUES
+                    ( :link_key, :link_sha256, :settings_url, :title, :context_id, :path, NOW(), NOW() )";
+            $PDOX->queryDie($sql, array(
+                ':link_key' => $post['link_id'],
+                ':link_sha256' => lti_sha256($post['link_id']),
+                ':settings_url' => $post['link_settings_url'],
+                ':title' => $post['link_title'],
+                ':context_id' => $row['context_id'],
+                ':path' => $post['link_path'],
+            ));
+            $row['link_id'] = $PDOX->lastInsertId();
+            $row['link_title'] = $post['link_title'];
+            $row['link_settings_url'] = $post['link_settings_url'];
+            $row['link_path'] = $post['link_path'];
+            $actions[] = "=== Inserted link id=".$row['link_id']." ".$row['link_title'];
+        }
 
 
         $user_displayname = isset($post['user_displayname']) ? $post['user_displayname'] : null;
@@ -1258,29 +1243,29 @@ class LTIX {
                 if ( count($pieces) > 0 ) $USER->firstname = $pieces[0];
                 if ( count($pieces) > 1 ) $USER->lastname = $pieces[count($pieces)-1];
             }
-            $USER->instructor = isset($LTI['role']) && $LTI['role'] == 5000 ;
-            $USER->ASC = isset($LTI['role']) && $LTI['role'] == 1000 ;
-            $USER->student = isset($LTI['role']) && $LTI['role'] == 0 ;
-
-            $USER->giveFeedback = false;
-            $USER->modifyQuestion = false;
-            $USER->readonlyView = false;
-            $USER->individualView = false;
-
-            // Get permissions
-            if (isset($LTI['role'])) {
-                $sql = "SELECT give_feedback, modify_question, readonly_view, individual_view FROM lms_role_permissions WHERE lms_role_number = :roleNumber";
-                $result = $PDOX->queryDie($sql, array(
-                    ":roleNumber" => $LTI['role']
-                ));
-
-                foreach ($result as $resultLine) {
-                    $USER->giveFeedback = $resultLine['give_feedback'];
-                    $USER->modifyQuestion = $resultLine['modify_question'];
-                    $USER->readonlyView = $resultLine['readonly_view'];
-                    $USER->individualView = $resultLine['individual_view'];
-                }
-            }
+            // $USER->instructor = isset($LTI['role']) && $LTI['role'] == 5000 ;
+            // $USER->ASC = isset($LTI['role']) && $LTI['role'] == 1000 ;
+            // $USER->student = isset($LTI['role']) && $LTI['role'] == 0 ;
+            //
+            // $USER->giveFeedback = false;
+            // $USER->modifyQuestion = false;
+            // $USER->readonlyView = false;
+            // $USER->individualView = false;
+            //
+            // // Get permissions
+            // if (isset($LTI['role'])) {
+            //     $sql = "SELECT give_feedback, modify_question, readonly_view, individual_view FROM lms_role_permissions WHERE lms_role_number = :roleNumber";
+            //     $result = $PDOX->queryDie($sql, array(
+            //         ":roleNumber" => $LTI['role']
+            //     ));
+            //
+            //     foreach ($result as $resultLine) {
+            //         $USER->giveFeedback = $resultLine['give_feedback'];
+            //         $USER->modifyQuestion = $resultLine['modify_question'];
+            //         $USER->readonlyView = $resultLine['readonly_view'];
+            //         $USER->individualView = $resultLine['individual_view'];
+            //     }
+            // }
 
             $TSUGI_LAUNCH->user = $USER;
         }
