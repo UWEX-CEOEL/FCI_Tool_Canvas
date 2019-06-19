@@ -20,7 +20,7 @@ $userId = $USER->id;
 $userRole = $USER->instructor;
 $currentUser = $USER->displayname;
 
-    if ($USER->instructor || $USER->ASC) {
+    if ($USER->instructor) {
         // In an instructor
 
         // The question should go here??
