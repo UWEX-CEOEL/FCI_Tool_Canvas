@@ -97,7 +97,7 @@ if ( count($_POST) > 0 ) {
         return;
     }
 
-    if ( $USER->instructor || $USER->ASC || $ok ) {
+    if ( $USER->instructor || $ok ) {
         // No problem
     } else {
         // No error message in session because status is always displayed
@@ -225,10 +225,10 @@ $OUTPUT->topNav();
 
 // echo('<span style="position: fixed; right: 10px; top: 5px;">');
 echo('<span style="float: right; margin-bottom: 10px;">');
-if ( $USER->modifyQuestion ) {
+if ( $userRole ) {
     echo('<a href="configure.php" class="btn btn-default">Flex Check-In Content</a> ');
 }
-if ( $USER->giveFeedback || $USER->readonlyView ) {
+if ( $userRole ) {
     echo('<a href="grades.php"><button class="btn btn-info">Submission Detail</button></a> '."\n");
 }
 $OUTPUT->exitButton();
@@ -294,15 +294,15 @@ if ( $gift === false || strlen($gift) < 1 ) {
     }*/
 }
 
-if (!$USER->giveFeedback && !$USER->modifyQuestion && !$USER->readonlyView && !$USER->individualView) {
-    header( 'Location: '.addSession('no-access-message.php') ) ;
-}
+// if (!$USER->giveFeedback && !$USER->modifyQuestion && !$USER->readonlyView && !$USER->individualView) {
+//     header( 'Location: '.addSession('no-access-message.php') ) ;
+// }
 
 
 
 $hideQuestion = false;
 
-if ($USER->individualView) {
+if (! $userRole) {
 
 $sql = "SELECT fci_state FROM lti_result WHERE result_id = :resultId";
 $result = $PDOX->queryDie($sql, array(
@@ -517,7 +517,7 @@ switch ($fciState) {
 }
 
 
-if ($USER->student && $oldfeedback != null && $oldfeedback != '' && !$hideQuestion) {
+if (! $userRole && $oldfeedback != null && $oldfeedback != '' && !$hideQuestion) {
     // Instructor Name display
     $sql = "SELECT u.displayname FROM {$CFG->dbprefix}lti_user AS u INNER JOIN fci_result_history AS f ON u.user_id=f.instructor_id WHERE f.link_id = :link_id && f.user_id = :student_id ORDER BY f.instructor_id DESC LIMIT 1";
     $stmt = $PDOX->queryDie($sql, array(
@@ -554,7 +554,7 @@ if ($resetFlag == 1) {
 } else {
     $displayPrevious = 0;
 }
-    
+
 if ($displayPrevious == 1) {
 echo('<p class="alert alert-info" style="clear:both;">Please note:<br /><br />If you are repeating this competency set for any reason (received an IP, PR, W, F grade) or if you completed the FCI previously but were subsequently dropped, you need to complete the FCI exercise again, starting with FCI Question 1. If you have questions please reach out to your ASC prior to the FCI deadline.<br /><br />If you have added this competency set after the subscription period has begun, please allow up to 24 hours for the Flex Check-In activity to become available. In the meantime, you may complete other activities within the competency set.</p>'."\n");
 }
@@ -564,14 +564,13 @@ if ( $USER->instructor) {
     echo('<p class="alert alert-success" style="clear:both;font-weight: bold;"> Instructor Preview : Below is what your students see when they log into this Flex Check-In Assignment </p>'."\n");
 }
 
-if ( $USER->ASC) {
-    echo('<p class="alert alert-success" style="clear:both;font-weight: bold;"> Administrative Preview : Below is what your students see when they log into this Flex Check-In Assignment </p>'."\n");
-}
 
 if(isset($RESULT->grade) && !$hideQuestion) {
     if($RESULT->grade ==1 || $RESULT->grade ==0){
         echo('<p class="alert alert-success" style="clear:both;">Your current submission on this assignment is: '.percent($RESULT->grade).'</p>'."\n");
-    } else if (isset($attempt->submit) && count($attempt->submit)>0){
+    } else if (isset($attempt->submit) ) {
+
+    // && count($attempt->submit)>0){
         echo('<p class="alert alert-info" style="clear:both;">Your Flex Check-In Assignment is Submitted but has not Received Feedback. </p>'."\n");
     } else {
         echo('<p class="alert alert-danger" style="clear:both;font-weight: bold;">You have yet to submit your Flex Check-In Assignment. Please do so below. </p>'."\n");
@@ -582,9 +581,7 @@ if(isset($RESULT->grade) && !$hideQuestion) {
 if ( ! $ok ) {
     if ( $USER->instructor ) {
         echo('<p class="alert alert-info" style="clear:both;">'.$why.' (except for the fact that you are the instructor)</p>'."\n");
-    } else if ($USER->ASC) {
-         echo('<p class="alert alert-info" style="clear:both;">'.$why.' (except for the fact that you are an ASC)</p>'."\n");
-     } else {
+    } else {
         echo('<p class="alert alert-danger" style="clear:both;">'.$why.'</p>'."\n");
     }
 }
@@ -610,18 +607,18 @@ if (!$hideQuestion) {
                 </ol>
 
                     <?php
-                    if ($USER->student) {
+                    if (!$userRole) {
                     ?>
                 <div style="text-align: center;"> <input type=submit name=doCancel  class="btn btn-info" onclick="location='<?php
                                 echo(addSession('feedback-display.php'));
                         ?>'; return false;" value="View Feedback">
 
                     <?php
-                    } else if ($ok || $USER->instructor || $USER->ASC ) {
+                    } else if ($ok || $userRole ) {
                         echo('<div style="text-align: center;">');
                     }
 
-                if ( $ok || $USER->instructor || $USER->ASC ) {
+                if ( $ok || $userRole ) {
                     echo('<input type="submit" value="Submit" class="btn btn-info"> </div>');
                 } else {
                     echo('</div>');

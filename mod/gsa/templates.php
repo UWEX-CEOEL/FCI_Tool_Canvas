@@ -4,7 +4,7 @@ $readonly = false;
 $displayPrevious = 1;
 $resetFlag = 0;
 
-if ($USER->student) {
+if (! $USER->instructor) {
 
 $sql = "SELECT fci_state FROM lti_result WHERE result_id = :resultId";
 $result = $PDOX->queryDie($sql, array(
@@ -19,10 +19,6 @@ if ($fciState == 5) {
     $readonly = true;
 }
 
-}
-
-if ($USER->readonlyView) {
-    $readonly = true;
 }
 
 
