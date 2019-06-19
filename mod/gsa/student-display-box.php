@@ -263,7 +263,23 @@ $OUTPUT->footerStart();
 	<p style="clear:both;font-weight: bold;">Please Insert or Update Your Answer Below :</p>
 
 	<?php
-	    if ($USER->readonlyView) {
+	    if (!$USER->instructor) {
+
+        $sql = "SELECT fci_state FROM lti_result WHERE result_id = :resultId";
+        $result = $PDOX->queryDie($sql, array(
+            ':resultId' => $resultId
+        ));
+
+        foreach ($result as $fciLine) {
+            $fciState = $fciLine['fci_state'];
+        }
+
+        $readonly = false;
+        if ($fciState == 5) {
+            $readonly = true;
+        }
+
+        if ($readonly) {
 	?>
     <textarea readonly id="studentResponse" type="text" name="{{code}}" value="{{value}}" size="400" rows="10" cols="80"/>
     <?php
@@ -272,6 +288,7 @@ $OUTPUT->footerStart();
     <textarea id="studentResponse" type="text" name="{{code}}" value="{{value}}" size="400" rows="10" cols="80"/>
     <?php
     }
+  }
     ?>
 
 </script>
