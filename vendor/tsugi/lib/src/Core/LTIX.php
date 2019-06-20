@@ -451,22 +451,24 @@ class LTIX {
         $start_time = self::wrapped_session_get($session_object, 'tsugi_permanent_start_time', false);
         if ( isset($row['user_id']) && $start_time !== false) {
             if ( Net::getIP() !== NULL ) {
-                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), ipaddr=:IP, lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE WHERE user_id = :user_id";
+                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), ipaddr=:IP, lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE, canvas_sis_user = :SISUSER WHERE user_id = :user_id";
                 $stmt = $PDOX->queryReturnError($sql, array(
                     ':IP' => Net::getIP(),
                     ':user_id' => $row['user_id'],
-                    ':LMSID' => (string)$request_data['ext_d2l_orgdefinedid'],
-                    ':LMSUSER' => $request_data['ext_d2l_username'],
-                    ':LMSROLE' => $request_data['ext_d2l_role']
+                    ':LMSID' => $_POST['custom_dxjcanvas_user'],
+                    ':LMSUSER' => $_POST['custom_canvas_username'],
+                    ':LMSROLE' => $_POST['custom_canvas_role'],
+                    ':SISUSER' => $_POST['custom_canvas_sis_user']
                     )
                 );
             } else {
-                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE WHERE user_id = :user_id";
+                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE, canvas_sis_user = :SISUSER WHERE user_id = :user_id";
                 $stmt = $PDOX->queryReturnError($sql, array(
                     ':user_id' => $row['user_id'],
-                    ':LMSID' => (string)$request_data['ext_d2l_orgdefinedid'],
-                    ':LMSUSER' => $request_data['ext_d2l_username'],
-                    ':LMSROLE' => $request_data['ext_d2l_role']
+                    ':LMSID' => $_POST['custom_dxjcanvas_user'],
+                    ':LMSUSER' => $_POST['custom_canvas_username'],
+                    ':LMSROLE' => $_POST['custom_canvas_role'],
+                    ':SISUSER' => $_POST['custom_canvas_sis_user']
                 ));
             }
             if ( ! $stmt->success ) {
@@ -819,18 +821,17 @@ class LTIX {
         $lms_role = isset($request_data['ext_d2l_role']) ? $request_data['ext_d2l_role'] : null;
         if ( $row['user_id'] === null && isset($post['user_id']) ) {
             $sql = "INSERT INTO {$p}lti_user
-                ( user_key, user_sha256, displayname, email, key_id, created_at, updated_at,lms_defined_id,lms_username,lms_rolename, canvas_user_id, canvas_sis_user) VALUES
-                ( :user_key, :user_sha256, :displayname, :email, :key_id, NOW(), NOW(),:LMSID,:LMSUSER,:LMSROLE, :canvasUserId, :canvasSisUser)";
+                ( user_key, user_sha256, displayname, email, key_id, created_at, updated_at,lms_defined_id,lms_username,lms_rolename, canvas_sis_user) VALUES
+                ( :user_key, :user_sha256, :displayname, :email, :key_id, NOW(), NOW(),:LMSID,:LMSUSER,:LMSROLE, :canvasSisUser)";
             $PDOX->queryDie($sql, array(
                 ':user_key' => $post['user_id'],
                 ':user_sha256' => lti_sha256($post['user_id']),
                 ':displayname' => $_POST['custom_canvas_displayname'],
                 ':email' => $_POST['custom_canvas_email'],
                 ':key_id' => $row['key_id'],
-                ':LMSID' => $lms_defined_id,
-                ':LMSUSER' => $lms_username,
-                ':LMSROLE' => $lms_role,
-                ':canvasUserId' => $_POST['custom_dxjcanvas_user'],
+                ':LMSID' => $_POST['custom_dxjcanvas_user'],
+                ':LMSUSER' => $_POST['custom_canvas_username'],
+                ':LMSROLE' => $_POST['custom_canvas_role'],
                 ':canvasSisUser' => $_POST['custom_canvas_sis_user']
                 ));
             $row['user_id'] = $PDOX->lastInsertId();

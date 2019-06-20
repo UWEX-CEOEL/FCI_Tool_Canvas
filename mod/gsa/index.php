@@ -13,6 +13,7 @@ use \Tsugi\UI\SettingsForm;
 use \Tsugi\Grades\GradeUtil;
 use \PHPMailer\PHPMailer\PHPMailer;
 use \PHPMailer\PHPMailer\Exception;
+use \Tsugi\Core\User;
 
 
 function percent($x) {
@@ -24,7 +25,16 @@ $p = $CFG->dbprefix;
 $fciType = LTIX::ltiCustomGet('fcitype');
 $resultId = $_SESSION['lti']['result_id'];
 $fciState;
-$userRole = $USER->instructor;
+
+// $currentRole = $PDOX->rowDie("SELECT lms_rolename FROM {$CFG->dbprefix}lti_user WHERE user_id = :userId",
+// array(':userId' => $USER->id));
+//
+// if (fnmatch('*TeacherEnrollment*', $currentRole['lms_rolename'])) {
+//   $USER->setInstructor(1);
+// }
+
+$userRole = $USER->determineUserRole($USER->id);
+
 
 if ( SettingsForm::handleSettingsPost() ) {
     header( 'Location: '.addSession('index.php') ) ;
@@ -51,6 +61,7 @@ if ( strlen($gift) > 0 ) {
     $errors = array();
     parse_gift($gift, $questions, $errors);
 }
+
 
 // Load the previous attempt
 $attempt = json_decode($RESULT->getJson());
@@ -97,7 +108,7 @@ if ( count($_POST) > 0 ) {
         return;
     }
 
-    if ( $USER->instructor || $ok ) {
+    if ( $userRole || $ok ) {
         // No problem
     } else {
         // No error message in session because status is always displayed
@@ -283,7 +294,7 @@ if ( $gift === false || strlen($gift) < 1 ) {
     $LINK->setJson($defaultgift);
     header( 'Location: '.addSession('index.php') ) ;
     /*
-    if(!$USER->instructor){
+    if(!$userRole){
         echo('<p class="alert alert-danger" style="clear:both;">You do not have access to this Flex Check-In Assignment yet. Please try again later.</p>'."\n");
         $OUTPUT->footer();
         return;
@@ -560,7 +571,7 @@ echo('<p class="alert alert-info" style="clear:both;">Please note:<br /><br />If
 }
 
 
-if ( $USER->instructor) {
+if ( $userRole) {
     echo('<p class="alert alert-success" style="clear:both;font-weight: bold;"> Instructor Preview : Below is what your students see when they log into this Flex Check-In Assignment </p>'."\n");
 }
 
@@ -579,7 +590,7 @@ if(isset($RESULT->grade) && !$hideQuestion) {
 
 
 if ( ! $ok ) {
-    if ( $USER->instructor ) {
+    if ( $userRole ) {
         echo('<p class="alert alert-info" style="clear:both;">'.$why.' (except for the fact that you are the instructor)</p>'."\n");
     } else {
         echo('<p class="alert alert-danger" style="clear:both;">'.$why.'</p>'."\n");

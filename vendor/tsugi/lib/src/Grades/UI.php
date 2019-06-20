@@ -15,7 +15,9 @@ class UI {
         global $CFG, $OUTPUT, $USER, $LINK;
         // Require CONTEXT, USER, and LINK
         $LAUNCH = LTIX::requireData();
-        if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
+        $userRole = $USER->determineUserRole($USER->id);
+
+        if ( ! $userRole ) die("Requires instructor role");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
@@ -54,7 +56,7 @@ class UI {
                               U.email AS email,
                               R.grade AS grade,
                               (
-                                    SELECT term_name 
+                                    SELECT term_name
                                     FROM fci_term t
                                     WHERE t.term_id=substring(R.sis_enrollment_id, -4, 4)
                                 ) AS note,
@@ -72,7 +74,7 @@ class UI {
                                 lcase(b.EMAIL_ADDR) AS email,
                                 NULL AS grade,
                                 (
-                                    SELECT term_name 
+                                    SELECT term_name
                                     FROM fci_term t
                                     WHERE t.term_id=substring(e.EXT_COURSE_ID, -4, 4)
                                 ) AS note,
@@ -89,7 +91,7 @@ class UI {
                                                                             WHERE sysdate() BETWEEN t.term_start_dt AND t.term_end_dt) AND
                                       e.WITHDRAW_DT IS NULL AND
                                       r.result_id IS NULL;";
-        
+
         $sqlGraded= "SELECT R.user_id AS user_id, displayname, email,
                 grade, note, R.updated_at AS last_updated
             FROM {$p}lti_result AS R

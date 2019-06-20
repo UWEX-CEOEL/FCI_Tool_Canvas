@@ -4,7 +4,7 @@ $readonly = false;
 $displayPrevious = 1;
 $resetFlag = 0;
 
-if (! $USER->instructor) {
+if (! $userRole) {
 
 $sql = "SELECT fci_state FROM lti_result WHERE result_id = :resultId";
 $result = $PDOX->queryDie($sql, array(

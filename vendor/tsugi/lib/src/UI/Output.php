@@ -400,12 +400,14 @@ function googleTranslateElementInit() {
     function welcomeUserCourse($welcomePage=false) {
         global $USER, $CONTEXT;
 
-        if(!$USER->instructor && $welcomePage!==false){
+        $userRole = $USER->determineUserRole($USER->id);
+
+        if(!$userRole && $welcomePage!==false){
             echo($welcomePage);
             //Add Thematic Break
             echo('<hr>');
         }
-        
+
         if ( isset($USER->displayname) ) {
             if ( isset($CONTEXT->title) ) {
                 printf(_m("<p>Welcome %s from %s"), htmlent_utf8($USER->displayname), htmlent_utf8($CONTEXT->title));
@@ -420,7 +422,7 @@ function googleTranslateElementInit() {
             }
         }
 
-        if ( $USER->instructor ) {
+        if ( $userRole ) {
             echo(" "._m("(Instructor)"));
         }
         echo("</p>\n");

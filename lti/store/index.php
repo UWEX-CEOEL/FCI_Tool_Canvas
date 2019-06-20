@@ -20,6 +20,7 @@ use \Tsugi\UI\Lessons;
 
 // No parameter means we require CONTEXT, USER, and LINK
 $LAUNCH = LTIX::requireData(LTIX::USER);
+$userRole = $USER->determineUserRole($USER->id);
 
 // Model
 $p = $CFG->dbprefix;
@@ -80,7 +81,7 @@ if ( $allow_lti ) {
 $OUTPUT->bodyStart();
 $OUTPUT->flashMessages();
 
-if ( ! $USER->instructor ) {
+if ( ! $userRole ) {
     echo("<p>This tool must be launched by the instructor</p>");
     $OUTPUT->footer();
     return;
@@ -143,7 +144,7 @@ if ( isset($_GET['install']) ) {
     // echo("<pre>\n");print_r($tool);echo("</pre>\n");
     $OUTPUT->footer();
     return;
-} 
+}
 
 // Handle the assignment install
 if ( $l && isset($_GET['assignment']) ) {
@@ -192,7 +193,7 @@ if ( $l && isset($_GET['assignment']) ) {
     // echo("<pre>\n");print_r($lti);echo("</pre>\n");
     $OUTPUT->footer();
     return;
-} 
+}
 
 // Handle the content install
 $content_items = array();
@@ -376,7 +377,7 @@ if ( $l && $allow_lti ) {
         echo("</ul>\n");
     }
     echo("</div>\n");
-} 
+}
 
 if ( $l && $allow_import ) {
     echo('<div class="tab-pane fade '.$active.' in" id="import">'."\n");

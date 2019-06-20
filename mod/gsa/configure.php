@@ -9,8 +9,9 @@ use \Tsugi\Core\Link;
 
 // Sanity checks
 $LAUNCH = LTIX::requireData();
- 
-if ( ! $USER->instructor ) die("Requires modifying role permission");
+$userRole = $USER->determineUserRole($USER->id);
+
+if ( ! $userRole ) die("Requires modifying role permission");
 
 // Model
 $p = $CFG->dbprefix;
@@ -64,7 +65,7 @@ if ( isset($_POST['gift']) ) {
         return;
     }
 
-    if ($USER->instructor) {
+    if ($userRole) {
         // THEN update link table with the new json, the date updated, the instructor id, and the instructor name
         $sql = "UPDATE {$p}lti_link SET json = :json, updated_at = NOW(), instructor_id = :instructor_id WHERE link_id = :link_id";
         $PDOX->queryDie($sql, array(

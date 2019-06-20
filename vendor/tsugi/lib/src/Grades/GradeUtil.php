@@ -9,8 +9,9 @@ class GradeUtil {
     public static function gradeLoadAll() {
         global $CFG, $USER, $LINK, $PDOX;
         $LAUNCH = LTIX::requireData(LTIX::LINK);
+        $userRole = $USER->determineUserRole($USER->id);
 
-        if ( ! $USER->instructor ) die("Requires instructor role");
+        if ( ! $userRole ) die("Requires instructor role");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
@@ -50,7 +51,9 @@ class GradeUtil {
     public static function gradeLoad($user_id=false) {
         global $CFG, $USER, $LINK, $PDOX;
         $LAUNCH = LTIX::requireData(array(LTIX::LINK, LTIX::USER));
-        if ( ! $USER->instructor && $user_id !== false ) die("Requires instructor role");
+        $userRole = $USER->determineUserRole($USER->id);
+
+        if ( ! $userRole && $user_id !== false ) die("Requires instructor role");
         if ( $user_id == false ) $user_id = $USER->id;
         $p = $CFG->dbprefix;
 
