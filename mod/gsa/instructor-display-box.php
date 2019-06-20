@@ -16,6 +16,7 @@ function percent($x) {
 
 $LAUNCH = LTIX::requireData();
 $p = $CFG->dbprefix;
+$userRole = $USER->determineUserRole($USER->id);
 
 if ( SettingsForm::handleSettingsPost() ) {
     return;
@@ -85,7 +86,7 @@ if ( count($_POST) > 0 ) {
         return;
     }
 
-    if ( $USER->instructor || $ok ) {
+    if ( $userRole || $ok ) {
         // No problem
     } else {
         // No error message in session because status is always displayed
@@ -200,7 +201,7 @@ if ( $gift === false || strlen($gift) < 1 ) {
 
     $LINK->setJson($defaultgift);
     /*
-    if(!$USER->instructor){
+    if(!$userRole){
         echo('<p class="alert alert-danger" style="clear:both;">You do not have access to this Flex Check-In Assignment yet. Please try again later.</p>'."\n");
         $OUTPUT->footer();
         return;
@@ -211,7 +212,7 @@ if ( $gift === false || strlen($gift) < 1 ) {
     }*/
 }
 
-if (!$USER->instructor && $oldfeedback != null && $oldfeedback != '') {
+if (!$userRole && $oldfeedback != null && $oldfeedback != '') {
     // Instructor Name display
     $sql = "SELECT u.displayname FROM {$CFG->dbprefix}lti_user AS u INNER JOIN fci_result_history AS f ON u.user_id=f.instructor_id WHERE f.link_id = :link_id && f.user_id = :student_id ORDER BY f.instructor_id DESC LIMIT 1";
     $stmt = $PDOX->queryDie($sql, array(
@@ -241,7 +242,7 @@ parse_gift($gift, $questions, $errors);
                 </ol>
 
                     <?php
-                    $userRole = $USER->instructor;
+                    // $userRole = $USER->instructor;
                     if (!$userRole) {
                     ?>
                 <div style="text-align: center;"> <input type=submit name=doCancel  class="btn btn-info" onclick="location='<?php
@@ -249,11 +250,11 @@ parse_gift($gift, $questions, $errors);
                         ?>'; return false;" value="View Feedback">
 
                     <?php
-                    } else if ($ok || $USER->instructor ) {
+                  } else if ($ok || $userRole ) {
                         echo('<div style="text-align: center;">');
                     }
 
-                if ( $ok || $USER->instructor ) {
+                if ( $ok || $userRole ) {
                     echo('<input type="submit" value="Submit" class="btn btn-info"> </div>');
                 } else {
                     echo('</div>');
