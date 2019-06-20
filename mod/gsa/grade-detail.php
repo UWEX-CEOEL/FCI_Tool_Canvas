@@ -12,7 +12,7 @@ use \Tsugi\Core\LTIX;
 use \Tsugi\Grades\GradeUtil;
 
 $LAUNCH = LTIX::requireData();
-$userRole = $USER->instructor;
+$userRole = $USER->determineUserRole($USER->id);
 
 // Get the user's grade data also checks session
 $row = GradeUtil::gradeLoad($_REQUEST['user_id']);
@@ -155,7 +155,7 @@ $OUTPUT->header();
         </p>
     <h3>Instructor Feedback </h3>
     <?php
-    if (!$USER->instructor) {
+    if (!$userRole) {
     ?>
         <p>
             <textarea name ="feedback" size="100" rows="5" cols="80"><?php
