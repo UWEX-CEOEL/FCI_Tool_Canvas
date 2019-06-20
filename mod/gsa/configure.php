@@ -9,7 +9,8 @@ use \Tsugi\Core\Link;
 
 // Sanity checks
 $LAUNCH = LTIX::requireData();
-if ( ! $USER->modifyQuestion ) die("Requires modifying role permission");
+ 
+if ( ! $USER->instructor ) die("Requires modifying role permission");
 
 // Model
 $p = $CFG->dbprefix;
@@ -174,7 +175,7 @@ $OUTPUT->flashMessages();
     <hr>
     <div style ="text-align: center;">
         <?php
-        if (date('d') >= $CFG->firstQuestionModificationDay && date('d') <= $CFG->lastQuestionModificationDay) {
+        if (date('d') >= 20 && date('d') <= 25) {
             ?>
             <form method="post" style="display: inline-block;margin-left:5%;text-align: left;">
                 <p><b>Flex Check-In Question :</b></p>
@@ -212,7 +213,7 @@ $OUTPUT->flashMessages();
                 <p>You cannot update any questions until
 
                     <?php
-                    if (date('d') < $CFG->firstQuestionModificationDay) {
+                    if (date('d') < 20) {
                         echo date('M');
                     } else {
                         echo date('M', strtotime('+1 month'));
@@ -221,7 +222,7 @@ $OUTPUT->flashMessages();
                     $formatStyle = new NumberFormatter('en_US', NumberFormatter::SPELLOUT);
                     $formatStyle->setTextAttribute(NumberFormatter::DEFAULT_RULESET, "%spellout-ordinal");
 
-                    echo " " . $CFG->firstQuestionModificationDay . substr($formatStyle->format($CFG->firstQuestionModificationDay), -2) . ".";
+                    echo " 20th.";
                     ?>
 
                 </p>
