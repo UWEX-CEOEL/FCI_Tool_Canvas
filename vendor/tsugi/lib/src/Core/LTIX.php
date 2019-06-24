@@ -887,11 +887,12 @@ class LTIX {
         // grades locally in this row - even if we cannot send grades
         if ( $row['result_id'] === null && $row['link_id'] !== null && $row['user_id'] !== null ) {
             $sql = "INSERT INTO {$p}lti_result
-                ( link_id, user_id, created_at, updated_at ) VALUES
-                ( :link_id, :user_id, NOW(), NOW() )";
+                ( link_id, user_id, created_at, updated_at, current_section_term ) VALUES
+                ( :link_id, :user_id, NOW(), NOW(), :currentSectionTerm )";
             $PDOX->queryDie($sql, array(
                 ':link_id' => $row['link_id'],
-                ':user_id' => $row['user_id']));
+                ':user_id' => $row['user_id'],
+                ':currentSectionTerm' => $_POST['custom_dxjCanvas_Section']));
             $row['result_id'] = $PDOX->lastInsertId();
             $actions[] = "=== Inserted result id=".$row['result_id'];
        }
