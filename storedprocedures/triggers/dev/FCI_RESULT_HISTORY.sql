@@ -25,8 +25,6 @@ SET studentEnrollments = (
 
 SET resetFlag = (enrollmentCount > studentEnrollments);
 
-
-
 IF (OLD.json <> NEW.json) THEN
 	   INSERT INTO 
 	   tsugi.fci_result_history(
