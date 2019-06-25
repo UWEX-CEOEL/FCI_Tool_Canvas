@@ -9,7 +9,9 @@ use \Tsugi\Core\Link;
 
 // Sanity checks
 $LAUNCH = LTIX::requireData();
-if ( ! $USER->modifyQuestion ) die("Requires modifying role permission");
+$userRole = $USER->determineUserRole($USER->id);
+
+if ( ! $userRole ) die("Requires modifying role permission");
 
 // Model
 $p = $CFG->dbprefix;
@@ -63,7 +65,7 @@ if ( isset($_POST['gift']) ) {
         return;
     }
 
-    if ($USER->instructor) {
+    if ($userRole) {
         // THEN update link table with the new json, the date updated, the instructor id, and the instructor name
         $sql = "UPDATE {$p}lti_link SET json = :json, updated_at = NOW(), instructor_id = :instructor_id WHERE link_id = :link_id";
         $PDOX->queryDie($sql, array(
@@ -174,7 +176,7 @@ $OUTPUT->flashMessages();
     <hr>
     <div style ="text-align: center;">
         <?php
-        if (date('d') >= $CFG->firstQuestionModificationDay && date('d') <= $CFG->lastQuestionModificationDay) {
+        if (date('d') >= 20 && date('d') <= 25) {
             ?>
             <form method="post" style="display: inline-block;margin-left:5%;text-align: left;">
                 <p><b>Flex Check-In Question :</b></p>
@@ -212,7 +214,7 @@ $OUTPUT->flashMessages();
                 <p>You cannot update any questions until
 
                     <?php
-                    if (date('d') < $CFG->firstQuestionModificationDay) {
+                    if (date('d') < 20) {
                         echo date('M');
                     } else {
                         echo date('M', strtotime('+1 month'));
@@ -221,7 +223,7 @@ $OUTPUT->flashMessages();
                     $formatStyle = new NumberFormatter('en_US', NumberFormatter::SPELLOUT);
                     $formatStyle->setTextAttribute(NumberFormatter::DEFAULT_RULESET, "%spellout-ordinal");
 
-                    echo " " . $CFG->firstQuestionModificationDay . substr($formatStyle->format($CFG->firstQuestionModificationDay), -2) . ".";
+                    echo " 20th.";
                     ?>
 
                 </p>

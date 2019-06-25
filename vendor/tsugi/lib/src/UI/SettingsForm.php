@@ -25,8 +25,9 @@ class SettingsForm {
      */
     public static function handleSettingsPost() {
         global $USER;
+        $userRole = $USER->determineUserRole($USER->id);
 
-        if ( isset($_POST['settings_internal_post']) && $USER->instructor ) {
+        if ( isset($_POST['settings_internal_post']) && $userRole ) {
             $newsettings = array();
             foreach ( $_POST as $k => $v ) {
                 if ( $k == session_name() ) continue;
@@ -58,16 +59,17 @@ class SettingsForm {
 
     public static function start() {
         global $USER, $LINK, $OUTPUT;
+        $userRole = $USER->determineUserRole($USER->id);
 ?>
 <div id="settings" title="Settings" style="display: none;"> <!-- model -->
-      <?php if ( $USER->instructor ) { ?>
+      <?php if ( $userRole ) { ?>
       <form id="settings_form" method="POST">
       <?php } ?>
       <div> <!-- modal-body -->
         <img id="settings_spinner" src="<?php echo($OUTPUT->getSpinnerUrl()); ?>" style="display: none">
         <span id="save_fail" style="display:none; color:blue"><?php _me('Unable to save settings'); ?></span>
         </p>
-            <?php if ( $USER->instructor ) { ?>
+            <?php if ( $userRole ) { ?>
             <input type="hidden" name="settings_internal_post" value="1"/>
             <?php }
     }
@@ -77,15 +79,16 @@ class SettingsForm {
      */
     public static function end() {
         global $USER;
+        $userRole = $USER->determineUserRole($USER->id);
 ?>
       </div><!-- / modal-body -->
       <div> <!-- modal-footer -->
         <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-        <?php if ( $USER->instructor ) { ?>
+        <?php if ( $userRole ) { ?>
         <button type="button" id="settings_save" onclick="submit();" class="btn btn-primary">Save changes</button>
         <?php } ?>
       </div><!-- / .modal-footer -->
-    <?php if ( $USER->instructor ) { ?>
+    <?php if ( $userRole ) { ?>
     </form>
     <?php } ?>
 </div><!-- /.modal -->
@@ -98,8 +101,9 @@ class SettingsForm {
     public static function select($name, $default=false, $fields)
     {
         global $USER;
+        $userRole = $USER->determineUserRole($USER->id);
         $oldsettings = Settings::linkGetAll();
-        if ( ! $USER->instructor ) {
+        if ( ! $userRole ) {
             $configured = false;
             foreach ( $fields as $k => $v ) {
                 $index = $k;
@@ -142,10 +146,12 @@ class SettingsForm {
     public static function text($name, $title=false)
     {
         global $USER;
+        $userRole = $USER->determineUserRole($USER->id);
+
         $oldsettings = Settings::linkGetAll();
         $configured = isset($oldsettings[$name]) ? $oldsettings[$name] : false;
         if ( $title === false ) $title = $name;
-        if ( ! $USER->instructor ) {
+        if ( ! $userRole ) {
             if ( $configured === false ) {
                 echo('<p>Setting '.htmlent_utf8($name).' is not set</p>');
             } else {
@@ -244,12 +250,14 @@ class SettingsForm {
     public static function dueDate()
     {
         global $USER;
+        $userRole = $USER->determineUserRole($USER->id);
+
         $due = Settings::linkGet('due', '');
         $timezone = Settings::linkGet('timezone', 'Pacific/Honolulu');
         $time = Settings::linkGet('penalty_time', 86400);
         $cost = Settings::linkGet('penalty_cost', 0.2);
 
-        if ( ! $USER->instructor ) {
+        if ( ! $userRole ) {
             if ( strlen($due) < 1 ) {
                 echo("<p>There is currently no due date/time for this assignment.</p>\n");
                 return;
@@ -292,7 +300,8 @@ class SettingsForm {
         global $USER;
 /*
         return; // Deprecated
-        if ( ! $USER->instructor ) return;
+        $userRole = $USER->determineUserRole($USER->id);
+        if ( ! $userRole ) return;
         $done = Settings::linkGet('done', '');
 ?>
         <label for="done">

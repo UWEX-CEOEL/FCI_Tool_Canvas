@@ -9,7 +9,9 @@ class GradeUtil {
     public static function gradeLoadAll() {
         global $CFG, $USER, $LINK, $PDOX;
         $LAUNCH = LTIX::requireData(LTIX::LINK);
-        if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
+        $userRole = $USER->determineUserRole($USER->id);
+
+        if ( ! $userRole ) die("Requires instructor role");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
@@ -49,7 +51,9 @@ class GradeUtil {
     public static function gradeLoad($user_id=false) {
         global $CFG, $USER, $LINK, $PDOX;
         $LAUNCH = LTIX::requireData(array(LTIX::LINK, LTIX::USER));
-        if ( ! $USER->instructor && ! $USER->ASC && $user_id !== false ) die("Requires instructor or ASC role");
+        $userRole = $USER->determineUserRole($USER->id);
+
+        if ( ! $userRole && $user_id !== false ) die("Requires instructor role");
         if ( $user_id == false ) $user_id = $USER->id;
         $p = $CFG->dbprefix;
 
@@ -119,7 +123,7 @@ class GradeUtil {
         global $CFG, $PDOX;
         $p = $CFG->dbprefix;
         $sql =
-        "SELECT R.result_id AS result_id, L.title as title, L.link_key AS resource_link_id, 
+        "SELECT R.result_id AS result_id, L.title as title, L.link_key AS resource_link_id,
             R.grade AS grade, R.note AS note
         FROM {$p}lti_result AS R
         JOIN {$p}lti_link as L ON R.link_id = L.link_id

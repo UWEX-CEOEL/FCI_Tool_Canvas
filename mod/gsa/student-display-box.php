@@ -16,6 +16,7 @@ function percent($x) {
 
 $LAUNCH = LTIX::requireData();
 $p = $CFG->dbprefix;
+$userRole = $USER->determineUserRole($USER->id);
 
 
 if ( SettingsForm::handleSettingsPost() ) {
@@ -88,7 +89,7 @@ if ( count($_POST) > 0 ) {
         return;
     }
 
-    if ( $USER->instructor || $ok ) {
+    if ( $userRole || $ok ) {
         // No problem
     } else {
         // No error message in session because status is always displayed
@@ -149,7 +150,7 @@ $OUTPUT->topNav();
 
 // echo('<span style="position: fixed; right: 10px; top: 5px;">');
 echo('<span style="float: right; margin-bottom: 10px;">');
-if ( $USER->instructor ) {
+if ( $userRole ) {
     echo('<a href="configure.php" class="btn btn-default">Flex Check-In Content</a> ');
     echo('<a href="grades.php"><button class="btn btn-info">Submission Detail</button></a> '."\n");
 }
@@ -205,7 +206,7 @@ if ( $gift === false || strlen($gift) < 1 ) {
     $LINK->setJson($defaultgift);
     header( 'Location: '.addSession('index.php') ) ;
     /*
-    if(!$USER->instructor){
+    if(!$userRole){
         echo('<p class="alert alert-danger" style="clear:both;">You do not have access to this Flex Check-In Assignment yet. Please try again later.</p>'."\n");
         $OUTPUT->footer();
         return;
@@ -233,7 +234,7 @@ parse_gift($gift, $questions, $errors);
                 </ol>
 
                     <?php
-                if ( $ok || $USER->instructor ) {
+                if ( $ok || $userRole ) {
                     echo('<div style="text-align: center;">');
                     echo('<input type="submit" value="Submit" class="btn btn-info"> </div>');
                     echo('</div>');
@@ -263,7 +264,23 @@ $OUTPUT->footerStart();
 	<p style="clear:both;font-weight: bold;">Please Insert or Update Your Answer Below :</p>
 
 	<?php
-	    if ($USER->readonlyView) {
+	    if (!$userRole) {
+
+        $sql = "SELECT fci_state FROM lti_result WHERE result_id = :resultId";
+        $result = $PDOX->queryDie($sql, array(
+            ':resultId' => $resultId
+        ));
+
+        foreach ($result as $fciLine) {
+            $fciState = $fciLine['fci_state'];
+        }
+
+        $readonly = false;
+        if ($fciState == 5) {
+            $readonly = true;
+        }
+
+        if ($readonly) {
 	?>
     <textarea readonly id="studentResponse" type="text" name="{{code}}" value="{{value}}" size="400" rows="10" cols="80"/>
     <?php
@@ -272,6 +289,7 @@ $OUTPUT->footerStart();
     <textarea id="studentResponse" type="text" name="{{code}}" value="{{value}}" size="400" rows="10" cols="80"/>
     <?php
     }
+  }
     ?>
 
 </script>

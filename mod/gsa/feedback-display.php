@@ -12,15 +12,16 @@ use \Tsugi\Grades\GradeUtil;
 
 
 $LAUNCH = LTIX::requireData();
+$userRole = $USER->determineUserRole($USER->id);
+
 
 // Get all of the feedback connected to that question and person
 // Loop through, displaying the feedback in result id order (highest to lowest to show newer stuff) within an HTML template
 
 $userId = $USER->id;
-$userRole = $USER->instructor;
 $currentUser = $USER->displayname;
 
-    if ($USER->instructor || $USER->ASC) {
+    if ($userRole) {
         // In an instructor
 
         // The question should go here??
@@ -31,7 +32,7 @@ $currentUser = $USER->displayname;
         $fciType = LTIX::ltiCustomGet('fcitype');
         $displayNoResult = true;
 
-        if ($USER->instructor) {
+        if ($userRole) {
 
         $sql = "SELECT f.json, f.user_updated, f.instructor_updated, u.displayname FROM lti_result as r RIGHT JOIN fci_result_history AS f ON r.result_id = f.result_id INNER JOIN lti_user AS u ON f.user_id = u.user_id WHERE f.result_id = :resultId AND f.instructor_id = :instructorId AND f.user_id = :studentId AND r.fci_type = :fciType ORDER BY saved_timestamp DESC";
 
