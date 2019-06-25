@@ -305,4 +305,15 @@ class Result extends Entity {
                 ':RID' => $this->id)
         );
     }
+    
+    /**
+     *
+    */
+    public function wipeRepeats($resultId, $currentTerm) {
+      // SELECT to get stored course section
+
+      // Compare with current course section
+
+      // IF different, wipe json and grade
+    }
 }
