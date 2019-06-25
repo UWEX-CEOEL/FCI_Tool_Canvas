@@ -24,7 +24,10 @@ $LAUNCH = LTIX::requireData();
 $p = $CFG->dbprefix;
 $fciType = LTIX::ltiCustomGet('fcitype');
 $resultId = $_SESSION['lti']['result_id'];
+$currentTerm = $_SESSION['lti']['context_id'];
 $fciState;
+
+$RESULT->wipeRepeats($resultId, $currentTerm);
 
 // $currentRole = $PDOX->rowDie("SELECT lms_rolename FROM {$CFG->dbprefix}lti_user WHERE user_id = :userId",
 // array(':userId' => $USER->id));
