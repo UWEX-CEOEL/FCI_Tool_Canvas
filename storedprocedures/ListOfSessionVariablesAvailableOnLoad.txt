@@ -1,0 +1,95 @@
+List of $_SESSION variables available on load:
+
+Array (
+      [LAST_ACTIVITY] => 
+      [tsugi_permanent_start_time] => 
+      [lti] => Array (
+            [key_id] => 
+            [key_key] => 
+            [secret] => 
+            [new_secret] =>
+            [key_settings_url] =>
+            [nonce] =>
+            [context_id] => 
+            [context_title] => 
+            [context_sha256] => 
+            [context_settings_url] =>
+            [ext_memberships_id] =>
+            [ext_memberships_url] =>
+            [lineitems_url] =>
+            [memberships_url] =>
+            [lms_course_code] => 
+            [link_id] => 
+            [link_path] => 
+            [link_title] =>
+            [link_settings] =>
+            [link_settings_url] =>
+            [user_id] => 
+            [user_displayname] => 
+            [user_email] => 
+            [user_key] => 
+            [user_image] =>
+            [subscribe] =>
+            [user_sha256] => 
+            [membership_id] => 
+            [role] => 5000 [role_override] =>
+            [result_id] => 
+            [grade] => 1
+            [result_url] =>
+            [sourcedid] =>
+            [profile_id] =>
+            [profile_displayname] =>
+            [profile_email] =>
+            [profile_subscribe] =>
+            [service] =>
+            [service_id] =>
+      )
+      [lti_post] => Array (
+            [oauth_consumer_key] => 
+            [oauth_signature_method] => 
+            [oauth_timestamp] => 
+            [oauth_nonce] => 
+            [oauth_version] => 
+            [context_id] => 
+            [context_label] => 
+            [context_title] =>
+            [custom_canvas_displayname] =>
+            [custom_canvas_email] => 
+            [custom_canvas_enrollment_state] => 
+            [custom_canvas_role] =>
+            [custom_canvas_sis_course] =>
+            [custom_canvas_sis_user] => 
+            [custom_canvas_username] => 
+            [custom_dxjcanvas_course] => 
+            [custom_dxjcanvas_section] => 
+            [custom_dxjcanvas_sissection] => 
+            [custom_dxjcanvas_user] => 
+            [custom_fcitype] => 
+            [ext_roles] => 
+            [launch_presentation_document_target] => 
+            [launch_presentation_locale] => 
+            [launch_presentation_return_url] =>
+            [lti_message_type] =>
+            [lti_version] => 
+            [oauth_callback] => 
+            [resource_link_id] =>
+            [resource_link_title] => 
+            [roles] => 
+            [tool_consumer_info_product_family_code] => 
+            [tool_consumer_info_version] => 
+            [tool_consumer_instance_contact_email] =>
+            [tool_consumer_instance_guid] => 
+            [tool_consumer_instance_name] => 
+            [user_id] =>
+            [oauth_signature] => 
+      )
+      [HTTP_USER_AGENT] =>
+      [REMOTE_ADDR] => 
+      [CSRF_TOKEN] => 
+      [HEARTBEAT_COUNT] =>
+      [debug_log] => Array (
+            [0] => Array (
+                  [0] =>
+            )
+      )
+)
