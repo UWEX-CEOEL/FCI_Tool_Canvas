@@ -307,13 +307,29 @@ class Result extends Entity {
     }
     
     /**
-     *
+     * Wipe repeats when sections are different
     */
-    public function wipeRepeats($resultId, $currentTerm) {
-      // SELECT to get stored course section
+  public function wipeRepeats($resultId, $currentTerm, $currentUser) {
+      global $CFG, $PDOX;
 
-      // Compare with current course section
 
-      // IF different, wipe json and grade
+      $resultRecord = $PDOX->rowDie("SELECT user_id, current_section_term FROM {$CFG->dbprefix}lti_result WHERE result_id = :resultId",
+      array(':resultId' => $resultId));
+
+      $recordedSection = $resultRecord['current_section_term'];
+      $recordedUser = $resultRecord['user_id'];
+
+      // Check to ensure everything is properly set
+      if (isset($recordedSection) && isset($recordedUser) && $recordedSection != null && $recordedUser != null) {
+        // Check to ensure this is the current user
+        if ($recordedUser == $currentUser) {
+
+          if ($currentTerm != $recordedSection) {
+
+            $PDOX->queryDie("UPDATE {$CFG->dbprefix}lti_result SET grade = null, json = null, current_section_term = :newSectionTerm WHERE result_id = :resultId AND user_id = :userId",
+            array(':newSectionTerm' => $currentTerm, ':resultId' => $resultId, ':userId' => $currentUser));
+          }
+        }
+      }
     }
 }
