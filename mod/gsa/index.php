@@ -24,7 +24,7 @@ $LAUNCH = LTIX::requireData();
 $p = $CFG->dbprefix;
 $fciType = LTIX::ltiCustomGet('fcitype');
 $resultId = $_SESSION['lti']['result_id'];
-$currentTerm = $_SESSION['lti']['context_id'];
+$currentTerm = $_SESSION['lti_post']['custom_dxjcanvas_sissection'];
 $fciState;
 
 $RESULT->wipeRepeats($resultId, $currentTerm);
