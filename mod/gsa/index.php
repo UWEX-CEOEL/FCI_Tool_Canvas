@@ -27,17 +27,11 @@ $resultId = $_SESSION['lti']['result_id'];
 $currentTerm = $_SESSION['lti_post']['custom_dxjcanvas_sissection'];
 $fciState;
 
-$RESULT->wipeRepeats($resultId, $currentTerm);
-
-// $currentRole = $PDOX->rowDie("SELECT lms_rolename FROM {$CFG->dbprefix}lti_user WHERE user_id = :userId",
-// array(':userId' => $USER->id));
-//
-// if (fnmatch('*TeacherEnrollment*', $currentRole['lms_rolename'])) {
-//   $USER->setInstructor(1);
-// }
-
 $userRole = $USER->determineUserRole($USER->id);
 
+if (!$userRole) {
+    $RESULT->wipeRepeats($resultId, $currentTerm, $USER->id);
+}
 
 if ( SettingsForm::handleSettingsPost() ) {
     header( 'Location: '.addSession('index.php') ) ;
