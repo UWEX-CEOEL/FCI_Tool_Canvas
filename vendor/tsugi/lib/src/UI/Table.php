@@ -94,17 +94,8 @@ class Table {
         }
 
         $ordertext = '';
-        // if ( $params && isset($params['order_by']) && Table::matchColumns($params['order_by'], $orderfields) ) {
-        if ($params && isset($orderfields)) {
-            
-            $orderList = '';
-            
-            foreach ($orderfields as $orderItem) {
-                $orderList .= $orderItem . ", ";
-            }
-            rtrim($orderList,',');
-            
-            $ordertext = $orderList;
+        if ( $params && isset($params['order_by']) && Table::matchColumns($params['order_by'], $orderfields) ) {
+            $ordertext = $params['order_by']." ";
             if ( isset($params['desc']) && $params['desc'] == 1) {
                 $ordertext .= "DESC ";
             }
@@ -122,12 +113,12 @@ class Table {
             $desc = $params['desc']+0;
         }
 
-        $limittext = '200';
-//         if ( $page_start < 1 ) {
-//             $limittext = "".($page_length+1);
-//         } else {
-//             $limittext = "".$page_start.", ".($page_length+1);
-//         }
+        $limittext = '';
+        if ( $page_start < 1 ) {
+            $limittext = "".($page_length+1);
+        } else {
+            $limittext = "".$page_start.", ".($page_length+1);
+        }
 
         // Remove any GROUP BY
         $gpos = strpos($sql,"GROUP BY");
