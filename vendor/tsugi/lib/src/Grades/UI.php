@@ -15,9 +15,7 @@ class UI {
         global $CFG, $OUTPUT, $USER, $LINK;
         // Require CONTEXT, USER, and LINK
         $LAUNCH = LTIX::requireData();
-        $userRole = $USER->determineUserRole($USER->id);
-
-        if ( ! $userRole ) die("Requires instructor role");
+        if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
@@ -56,7 +54,7 @@ class UI {
                               U.email AS email,
                               R.grade AS grade,
                               (
-                                    SELECT term_name
+                                    SELECT term_name 
                                     FROM fci_term t
                                     WHERE t.term_id=substring(R.sis_enrollment_id, -4, 4)
                                 ) AS note,
@@ -74,7 +72,7 @@ class UI {
                                 lcase(b.EMAIL_ADDR) AS email,
                                 NULL AS grade,
                                 (
-                                    SELECT term_name
+                                    SELECT term_name 
                                     FROM fci_term t
                                     WHERE t.term_id=substring(e.EXT_COURSE_ID, -4, 4)
                                 ) AS note,
@@ -91,20 +89,21 @@ class UI {
                                                                             WHERE sysdate() BETWEEN t.term_start_dt AND t.term_end_dt) AND
                                       e.WITHDRAW_DT IS NULL AND
                                       r.result_id IS NULL;";
-
+        
         $sqlGraded= "SELECT R.user_id AS user_id, displayname, email,
                 grade, note, R.updated_at AS last_updated
             FROM {$p}lti_result AS R
             JOIN {$p}lti_user AS U ON R.user_id = U.user_id
             WHERE R.link_id = :LID AND grade = 1";
+        $params['desc'] = 1;
         // Create sub-category tables excluding the use of any search fields until further feedback
         echo('<p class="alert alert-info"> Below are the Submissions for this Flex Check-In Assignment:</p>');
         echo('<hr><h4> Awaiting Faculty Response:</h4>');
-        Table::pagedAuto($sqlCompleted,$query_parms, false, $orderfields, "grade-detail.php");
+        Table::pagedAuto($sqlCompleted,$query_parms, false, $orderfields, "grade-detail.php", $params);
         echo('<hr><h4> Incomplete Submissions:</h4>');
-        Table::pagedAuto($sqlIncomplete,$query_parms, $searchfields, $orderfields, "grade-detail.php");
+        Table::pagedAuto($sqlIncomplete,$query_parms, $searchfields, $orderfields, "grade-detail.php", $params);
         echo('<hr><h4> Completed Submissions:</h4>');
-        Table::pagedAuto($sqlGraded,$query_parms, $searchfields, $orderfields, "grade-detail.php");
+        Table::pagedAuto($sqlGraded,$query_parms, $searchfields, $orderfields, "grade-detail.php", $params);
 
 
 
