@@ -85,8 +85,7 @@ class Table {
         if ( $orderfields == false ) $orderfields = $searchfields;
 
         $searchtext = '';
-        // if ( count($searchfields) > 0 && isset($params['search_text']) ) {
-        if ( isset($params['search_text']) ) {
+        if ( count($searchfields) > 0 && isset($params['search_text']) ) {
             for($i=0; $i < count($searchfields); $i++ ) {
                 if ( $i > 0 ) $searchtext .= " OR ";
                 $searchtext .= $searchfields[$i]." LIKE :SEARCH".$i;
@@ -95,11 +94,23 @@ class Table {
         }
 
         $ordertext = '';
-        if ( $params && isset($params['order_by']) && Table::matchColumns($params['order_by'], $orderfields) ) {
-            $ordertext = $params['order_by']." ";
-            if ( isset($params['desc']) && $params['desc'] == 1) {
-                $ordertext .= "DESC ";
+        // if ( $params && isset($params['order_by']) && Table::matchColumns($params['order_by'], $orderfields) ) {
+        if ($params && isset($orderfields)) {
+            
+            $orderList = '';
+            
+            foreach ($orderfields as $orderItem) {
+                $orderList .= $orderItem;
+                
+                if ( isset($params['desc']) && $params['desc'] == 1) {
+                    $orderList .= " DESC";
+                }
+                
+                $orderList .= ", ";
             }
+            
+            $ordertext = substr_replace($orderList, "", -2);
+
         } else if ( count($orderfields) > 0 ) {
             $ordertext = $orderfields[0]." ";
         }
@@ -114,12 +125,12 @@ class Table {
             $desc = $params['desc']+0;
         }
 
-        $limittext = '';
-        if ( $page_start < 1 ) {
-            $limittext = "".($page_length+1);
-        } else {
-            $limittext = "".$page_start.", ".($page_length+1);
-        }
+        $limittext = '200';
+//         if ( $page_start < 1 ) {
+//             $limittext = "".($page_length+1);
+//         } else {
+//             $limittext = "".$page_start.", ".($page_length+1);
+//         }
 
         // Remove any GROUP BY
         $gpos = strpos($sql,"GROUP BY");
@@ -151,6 +162,8 @@ class Table {
         if ( strlen($limittext) > 0 ) {
             $newsql .= "\nLIMIT ".$limittext." ";
         }
+        
+        echo $newsql;
         return $newsql . "\n";
     }
 
@@ -265,7 +278,7 @@ class Table {
     <?php
     }
 
-    public static function pagedTable($rows, $searchfields=array(), $orderfields=false, $view=false, $params=false, $extra_buttons=false)
+    public static function pagedTable($rows, $searchfields=array(), $orderfields=false, $view=false, $params=false, $extra_buttons=false) 
     {
         if ( $params == false ) $params = $_GET;
         // Commenting out the header search and sort buttons.
@@ -276,7 +289,7 @@ class Table {
         $page_length = isset($params['page_length']) ? $params['page_length']+0 : self::$DEFAULT_PAGE_LENGTH;
         if ( $page_length < 0 ) $page_length = 0;
 
-        // When we are doing paging, we select page_length+1 rows to know whether
+        // When we are doing paging, we select page_length+1 rows to know whether 
         // we should show a Next button - but we don't want to show that extra
         // row in the output.
         if ( $page_length > 0 && $count > $page_length ) {
