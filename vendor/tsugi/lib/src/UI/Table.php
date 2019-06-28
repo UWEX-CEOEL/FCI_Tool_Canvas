@@ -23,7 +23,7 @@ use \Tsugi\Core\LTIX;
  */
 class Table {
 
-    public static $DEFAULT_PAGE_LENGTH = 20;  // Setting this to 2 is good for debugging
+    public static $DEFAULT_PAGE_LENGTH = 200;  // Setting this to 2 is good for debugging
 
     public static function doForm($values, $override=Array()) {
         foreach (array_merge($values,$override) as $key => $value) {
@@ -125,12 +125,11 @@ class Table {
             $desc = $params['desc']+0;
         }
 
-        $limittext = '200';
-//         if ( $page_start < 1 ) {
-//             $limittext = "".($page_length+1);
-//         } else {
-//             $limittext = "".$page_start.", ".($page_length+1);
-//         }
+        if ( $page_start < 1 ) {
+            $limittext = "".($page_length+1);
+        } else {
+            $limittext = "".$page_start.", ".($page_length+1);
+        }
 
         // Remove any GROUP BY
         $gpos = strpos($sql,"GROUP BY");
