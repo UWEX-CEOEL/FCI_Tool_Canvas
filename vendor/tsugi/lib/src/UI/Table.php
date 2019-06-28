@@ -163,7 +163,6 @@ class Table {
             $newsql .= "\nLIMIT ".$limittext." ";
         }
         
-        echo $newsql;
         return $newsql . "\n";
     }
 
