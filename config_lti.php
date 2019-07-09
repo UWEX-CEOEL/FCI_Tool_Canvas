@@ -40,7 +40,7 @@ unset($apphome);
 // to run the upgrade.php script which auto-creates the tables.
 //$CFG->pdo       = 'mysql:host=127.0.0.1;dbname=tsugi';
 $CFG->pdo       = 'mysql:host=localhost;port=3306;dbname=tsugi_canvas'; // MAMP
-$CFG->dbuser    = 'ltiuser';
+$CFG->dbuser    = 'ltiusercanvas';
 $CFG->dbpass    = 'l40CUzYjsHEvwx1H6yQX';
 
 // You can use the CDN copy of the static content - it is the
