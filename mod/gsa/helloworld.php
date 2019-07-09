@@ -2,7 +2,7 @@
 echo "Hello World";
 echo "<br />";
 
-global $CFG;
+$LAUNCH = LTIX::requireData();
 
 $usernameDB = $CFG->dbuser;
 echo $usernameDB;
