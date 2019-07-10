@@ -2,7 +2,9 @@
 echo "Hello World";
 echo "<br />";
 
-$LAUNCH = LTIX::requireData();
+print_r($_SESSION);
+
+//$LAUNCH = LTIX::requireData();
 
 // $usernameDB = $CFG->dbuser;
 // echo $usernameDB;
