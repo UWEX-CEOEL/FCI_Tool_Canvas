@@ -4,7 +4,7 @@ echo "<br />";
 
 $LAUNCH = LTIX::requireData();
 
-$usernameDB = $CFG->dbuser;
-echo $usernameDB;
+// $usernameDB = $CFG->dbuser;
+// echo $usernameDB;
 echo "!";
 ?>
