@@ -1,4 +1,5 @@
 <?php
+require_once "../config.php";
 use \Tsugi\Core\LTIX;
 
 echo "Hello World";
