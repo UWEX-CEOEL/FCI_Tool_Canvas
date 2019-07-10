@@ -2,7 +2,7 @@
 echo "Hello World";
 echo "<br />";
 
-print_r($_SESSION);
+print_r($SESSION);
 
 //$LAUNCH = LTIX::requireData();
 
