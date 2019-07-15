@@ -11,5 +11,5 @@ $LAUNCH = LTIX::requireData();
 
 $usernameDB = $CFG->dbuser;
 echo $usernameDB;
-echo "!";
+echo "!!";
 ?>
