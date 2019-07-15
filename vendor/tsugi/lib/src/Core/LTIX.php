@@ -451,24 +451,22 @@ class LTIX {
         $start_time = self::wrapped_session_get($session_object, 'tsugi_permanent_start_time', false);
         if ( isset($row['user_id']) && $start_time !== false) {
             if ( Net::getIP() !== NULL ) {
-                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), ipaddr=:IP, lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE, canvas_sis_user = :SISUSER WHERE user_id = :user_id";
+                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), ipaddr=:IP, lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE WHERE user_id = :user_id";
                 $stmt = $PDOX->queryReturnError($sql, array(
                     ':IP' => Net::getIP(),
                     ':user_id' => $row['user_id'],
-                    ':LMSID' => $_POST['custom_dxjcanvas_user'],
-                    ':LMSUSER' => $_POST['custom_canvas_username'],
-                    ':LMSROLE' => $_POST['custom_canvas_role'],
-                    ':SISUSER' => $_POST['custom_canvas_sis_user']
+                    ':LMSID' => (string)$request_data['ext_d2l_orgdefinedid'],
+                    ':LMSUSER' => $request_data['ext_d2l_username'],
+                    ':LMSROLE' => $request_data['ext_d2l_role']
                     )
                 );
             } else {
-                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE, canvas_sis_user = :SISUSER WHERE user_id = :user_id";
+                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE WHERE user_id = :user_id";
                 $stmt = $PDOX->queryReturnError($sql, array(
                     ':user_id' => $row['user_id'],
-                    ':LMSID' => $_POST['custom_dxjcanvas_user'],
-                    ':LMSUSER' => $_POST['custom_canvas_username'],
-                    ':LMSROLE' => $_POST['custom_canvas_role'],
-                    ':SISUSER' => $_POST['custom_canvas_sis_user']
+                    ':LMSID' => (string)$request_data['ext_d2l_orgdefinedid'],
+                    ':LMSUSER' => $request_data['ext_d2l_username'],
+                    ':LMSROLE' => $request_data['ext_d2l_role']
                 ));
             }
             if ( ! $stmt->success ) {
@@ -672,7 +670,7 @@ class LTIX {
             u.subscribe AS subscribe, u.user_sha256 AS user_sha256,
             m.membership_id, m.role, m.role_override,
             r.result_id, r.grade, r.result_url, r.sourcedid";
-
+        
         if ( $profile_table ) {
             $sql .= ",
             p.profile_id, p.displayname AS profile_displayname, p.email AS profile_email,
@@ -775,18 +773,14 @@ class LTIX {
         // if we didn't get context_id from post, we can't update lti_context!
         if ( $row['context_id'] === null && isset($post['context_id']) ) {
             $sql = "INSERT INTO {$p}lti_context
-                ( context_key, context_sha256, settings_url, title, key_id, created_at, updated_at, canvas_course_code, canvas_section_code, canvas_sis_course, canvas_sis_section ) VALUES
-                ( :context_key, :context_sha256, :settings_url, :title, :key_id, NOW(), NOW(), :canvasCourseCode, :canvasSectionCode, :canvasSisCourse, :canvasSisSection )";
+                ( context_key, context_sha256, settings_url, title, key_id, created_at, updated_at ) VALUES
+                ( :context_key, :context_sha256, :settings_url, :title, :key_id, NOW(), NOW() )";
             $PDOX->queryDie($sql, array(
                 ':context_key' => $post['context_id'],
                 ':context_sha256' => lti_sha256($post['context_id']),
                 ':settings_url' => $post['context_settings_url'],
                 ':title' => $post['context_title'],
-                ':key_id' => $row['key_id'],
-                ':canvasCourseCode' => $_POST['custom_dxjcanvas_course'],
-                ':canvasSectionCode' => $_POST['custom_dxjcanvas_section'],
-                ':canvasSisCourse' => $_POST['custom_canvas_sis_course'],
-                ':canvasSisSection' => $_POST['custom_dxjcanvas_sissection']));
+                ':key_id' => $row['key_id']));
             $row['context_id'] = $PDOX->lastInsertId();
             $row['context_title'] = $post['context_title'];
             $row['context_settings_url'] = $post['context_settings_url'];
@@ -813,7 +807,7 @@ class LTIX {
             $actions[] = "=== Inserted link id=".$row['link_id']." ".$row['link_title'];
         }
 
-
+        
         $user_displayname = isset($post['user_displayname']) ? $post['user_displayname'] : null;
         $user_email = isset($post['user_email']) ? $post['user_email'] : null;
         $lms_defined_id = isset($request_data['ext_d2l_orgdefinedid']) ? $request_data['ext_d2l_orgdefinedid'] : null;
@@ -821,18 +815,17 @@ class LTIX {
         $lms_role = isset($request_data['ext_d2l_role']) ? $request_data['ext_d2l_role'] : null;
         if ( $row['user_id'] === null && isset($post['user_id']) ) {
             $sql = "INSERT INTO {$p}lti_user
-                ( user_key, user_sha256, displayname, email, key_id, created_at, updated_at,lms_defined_id,lms_username,lms_rolename, canvas_sis_user) VALUES
-                ( :user_key, :user_sha256, :displayname, :email, :key_id, NOW(), NOW(),:LMSID,:LMSUSER,:LMSROLE, :canvasSisUser)";
+                ( user_key, user_sha256, displayname, email, key_id, created_at, updated_at,lms_defined_id,lms_username,lms_rolename) VALUES
+                ( :user_key, :user_sha256, :displayname, :email, :key_id, NOW(), NOW(),:LMSID,:LMSUSER,:LMSROLE)";
             $PDOX->queryDie($sql, array(
                 ':user_key' => $post['user_id'],
                 ':user_sha256' => lti_sha256($post['user_id']),
-                ':displayname' => $_POST['custom_canvas_displayname'],
-                ':email' => $_POST['custom_canvas_email'],
+                ':displayname' => $user_displayname,
+                ':email' => $user_email,
                 ':key_id' => $row['key_id'],
-                ':LMSID' => $_POST['custom_dxjcanvas_user'],
-                ':LMSUSER' => $_POST['custom_canvas_username'],
-                ':LMSROLE' => $_POST['custom_canvas_role'],
-                ':canvasSisUser' => $_POST['custom_canvas_sis_user']
+                ':LMSID' => $lms_defined_id,
+                ':LMSUSER' => $lms_username,
+                ':LMSROLE' => $lms_role
                 ));
             $row['user_id'] = $PDOX->lastInsertId();
             $row['user_email'] = $user_email;
@@ -887,13 +880,11 @@ class LTIX {
         // grades locally in this row - even if we cannot send grades
         if ( $row['result_id'] === null && $row['link_id'] !== null && $row['user_id'] !== null ) {
             $sql = "INSERT INTO {$p}lti_result
-                ( link_id, user_id, created_at, updated_at, current_section_term, fci_type ) VALUES
-                ( :link_id, :user_id, NOW(), NOW(), :currentSectionTerm, :fciType )";
+                ( link_id, user_id, created_at, updated_at ) VALUES
+                ( :link_id, :user_id, NOW(), NOW() )";
             $PDOX->queryDie($sql, array(
                 ':link_id' => $row['link_id'],
-                ':user_id' => $row['user_id'],
-                ':currentSectionTerm' => $_POST['custom_dxjCanvas_Section'],
-                ':fciType' => $_POST['custom_fcitype']));
+                ':user_id' => $row['user_id']));
             $row['result_id'] = $PDOX->lastInsertId();
             $actions[] = "=== Inserted result id=".$row['result_id'];
        }
@@ -951,10 +942,10 @@ class LTIX {
         // Update with FCI Type
         // IF statement?
 
-        if (isset($request_data['custom_fcitype']) && isset($row['link_id']) && $_POST['custom_fcitype'] != $row['fci_type']) {
+        if (isset($request_data['custom_fcitype']) && isset($row['link_id']) && $request_data['custom_fcitype'] != $row['fci_type']) {
             $sql="UPDATE {$p}lti_link SET fci_type = :fci_type WHERE link_id = :link_id";
             $PDOX->queryDie($sql, array(
-                ':fci_type' => $_POST['custom_fcitype'],
+                ':fci_type' => $request_data['custom_fcitype'],
                 ':link_id' => $row['link_id']
             ));
 
@@ -967,7 +958,7 @@ class LTIX {
 */
 
   }
-
+        
         // Grab the context scoped service URLs...
         $context_services = array('ext_memberships_id', 'ext_memberships_url', 'lineitems_url', 'memberships_url');
         if ( isset($row['context_id']) ) {
@@ -1249,7 +1240,29 @@ class LTIX {
                 if ( count($pieces) > 0 ) $USER->firstname = $pieces[0];
                 if ( count($pieces) > 1 ) $USER->lastname = $pieces[count($pieces)-1];
             }
+            $USER->instructor = isset($LTI['role']) && $LTI['role'] == 5000 ;
+            $USER->ASC = isset($LTI['role']) && $LTI['role'] == 1000 ;
+            $USER->student = isset($LTI['role']) && $LTI['role'] == 0 ;
 
+            $USER->giveFeedback = false;
+            $USER->modifyQuestion = false;
+            $USER->readonlyView = false;
+            $USER->individualView = false;
+
+            // Get permissions
+            if (isset($LTI['role'])) {
+                $sql = "SELECT give_feedback, modify_question, readonly_view, individual_view FROM lms_role_permissions WHERE lms_role_number = :roleNumber";
+                $result = $PDOX->queryDie($sql, array(
+                    ":roleNumber" => $LTI['role']
+                ));
+
+                foreach ($result as $resultLine) {
+                    $USER->giveFeedback = $resultLine['give_feedback'];
+                    $USER->modifyQuestion = $resultLine['modify_question'];
+                    $USER->readonlyView = $resultLine['readonly_view'];
+                    $USER->individualView = $resultLine['individual_view'];
+                }
+            }
 
             $TSUGI_LAUNCH->user = $USER;
         }
