@@ -7,6 +7,7 @@ use \Tsugi\OAuth\OAuthServer;
 use \Tsugi\OAuth\OAuthRequest;
 
 use \Tsugi\Util\LTI;
+use \Tsugi\Util\U;
 use \Tsugi\Util\Net;
 use \Tsugi\Util\LTIConstants;
 use \Tsugi\UI\Output;
@@ -14,8 +15,6 @@ use \Tsugi\Core\Settings;
 use \Tsugi\OAuth\OAuthUtil;
 use \Tsugi\Crypt\SecureCookie;
 use \Tsugi\Crypt\AesCtr;
-use \PHPMailer\PHPMailer\PHPMailer;
-use \PHPMailer\PHPMailer\Exception;
 
 /**
  * This an opinionated LTI class that defines how Tsugi tools interact with LTI
@@ -35,6 +34,9 @@ class LTIX {
     const LINK = "link_id";
     const ALL = "all";
     const NONE = "none";
+
+    // The maximum length of the VARCHAR field
+    const MAX_ACTIVITY = 1023;
 
     /**
      * Get a singleton global connection or set it up if not already set up.
@@ -137,6 +139,7 @@ class LTIX {
     public static function decrypt_secret($secret)
     {
         global $CFG;
+        if ( $secret === null || $secret === false ) return $secret;
         if ( ! startsWith($secret,'AES::') ) return $secret;
         $secret = substr($secret, 5);
         $decr = AesCtr::decrypt($secret, $CFG->cookiesecret, 256) ;
@@ -247,6 +250,10 @@ class LTIX {
      * @deprecated Session access should be through the Launch Object
      */
     public static function ltiParameter($varname, $default=false) {
+        global $TSUGI_LAUNCH;
+        if ( isset($TSUGI_LAUNCH) ) {
+            return $TSUGI_LAUNCH->ltiParameter($varname, $default);
+        }
         if ( ! isset($_SESSION) ) return $default;
         if ( ! isset($_SESSION['lti']) ) return $default;
         $lti = $_SESSION['lti'];
@@ -260,6 +267,10 @@ class LTIX {
      * @deprecated Session access should be through the Launch Object
      */
     public static function ltiRawPostArray() {
+        global $TSUGI_LAUNCH;
+        if ( isset($TSUGI_LAUNCH) ) {
+            return $TSUGI_LAUNCH->ltiRawPostArray();
+        }
         if ( ! isset($_SESSION) ) return array();
         if ( ! isset($_SESSION['lti_post']) ) return array();
         return($_SESSION['lti_post']);
@@ -271,6 +282,10 @@ class LTIX {
      * @deprecated Session access should be through the Launch Object
      */
     public static function ltiRawParameter($varname, $default=false) {
+        global $TSUGI_LAUNCH;
+        if ( isset($TSUGI_LAUNCH) ) {
+            return $TSUGI_LAUNCH->ltiRawParameter($varname, $default);
+        }
         if ( ! isset($_SESSION) ) return $default;
         if ( ! isset($_SESSION['lti_post']) ) return $default;
         $lti_post = $_SESSION['lti_post'];
@@ -424,11 +439,12 @@ class LTIX {
         }
 
         // Store the launch path
+        // TODO: Make sure we like this
         $post['link_path'] = self::curPageUrl();
-        $actions = self::adjustData($CFG->dbprefix, $row, $post, $needed,$request_data);
+        $actions = self::adjustData($CFG->dbprefix, $row, $post, $needed);
 
         $PDOX = self::getConnection();
-        // Record the nonce but first probabilistically check
+        // Record the nonce but first probabilistically check if we will clean out
         if ( $CFG->noncecheck > 0 ) {
             if ( (time() % $CFG->noncecheck) == 0 ) {
                 $PDOX->queryDie("DELETE FROM {$CFG->dbprefix}lti_nonce WHERE
@@ -447,36 +463,146 @@ class LTIX {
             $row['role'] = $row['role_override'];
         }
 
-        // Update the login_at data
+        // Update the login_at data and do analytics if requested
         $start_time = self::wrapped_session_get($session_object, 'tsugi_permanent_start_time', false);
-        if ( isset($row['user_id']) && $start_time !== false) {
+        if ( isset($row['user_id']) && $start_time === false ) {
             if ( Net::getIP() !== NULL ) {
-                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), ipaddr=:IP, lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE WHERE user_id = :user_id";
+                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), ipaddr=:IP WHERE user_id = :user_id";
                 $stmt = $PDOX->queryReturnError($sql, array(
                     ':IP' => Net::getIP(),
-                    ':user_id' => $row['user_id'],
-                    ':LMSID' => (string)$request_data['ext_d2l_orgdefinedid'],
-                    ':LMSUSER' => $request_data['ext_d2l_username'],
-                    ':LMSROLE' => $request_data['ext_d2l_role']
-                    )
-                );
+                    ':user_id' => $row['user_id']));
             } else {
-                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE WHERE user_id = :user_id";
+                $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW() WHERE user_id = :user_id";
                 $stmt = $PDOX->queryReturnError($sql, array(
-                    ':user_id' => $row['user_id'],
-                    ':LMSID' => (string)$request_data['ext_d2l_orgdefinedid'],
-                    ':LMSUSER' => $request_data['ext_d2l_username'],
-                    ':LMSROLE' => $request_data['ext_d2l_role']
-                ));
+                    ':user_id' => $row['user_id']));
             }
             if ( ! $stmt->success ) {
-                error_log("Upable to update login_at user_id=".$row['user_id']);
+                error_log("Unable to update login_at user_id=".$row['user_id']);
+            }
+
+            // Only learner launches are logged
+            if ( $CFG->launchactivity && isset($row['link_id']) && $row['link_id'] && $row['role'] == 0 ) {
+                $link_activity = isset($row['link_activity']) ? $row['link_activity'] : null;
+                $link_count = isset($row['link_count']) ? $row['link_count'] : 0;
+
+                if ( $link_activity == null || $link_count == 0 ) {
+
+                    $sql = "INSERT INTO {$CFG->dbprefix}lti_link_activity
+                                (link_id, event, link_count, updated_at) VALUES
+                                (:link_id, 0, 0, NOW())";
+
+                    $stmt = $PDOX->queryReturnError($sql, array(
+                        ':link_id' => $row['link_id']
+                    ));
+
+                    if ( ! $stmt->success ) {
+                        error_log("Unable to create activity record link=".$row['link_id']);
+                    }
+                }
+
+                $ent = new \Tsugi\Event\Entry();
+                if ( $link_activity ) $ent->deSerialize($link_activity);
+                $ent->total = $link_count;
+                $ent->click();
+                $activity = $ent->serialize(self::MAX_ACTIVITY);
+                $sql = "UPDATE {$CFG->dbprefix}lti_link_activity
+                        SET activity=:activity, updated_at=NOW(), link_count=link_count+1
+                        WHERE link_id = :link_id AND event = 0";
+                $stmt = $PDOX->queryReturnError($sql, array(
+                  ':link_id' => $row['link_id'],
+                  ':activity' => $activity
+                ));
+
+                if ( ! $stmt->success ) {
+                    error_log("Unable to update activity record link=".$row['link_id']);
+                }
+
+                // Now user activity
+                $link_activity = isset($row['link_user_activity']) ? $row['link_user_activity'] : null;
+                $link_count = isset($row['link_user_count']) ? $row['link_user_count'] : 0;
+
+                if ( isset($row['user_id']) && $row['user_id'] ) {
+                    if ( $link_activity == null || $link_count == 0 ) {
+
+                        $sql = "INSERT INTO {$CFG->dbprefix}lti_link_user_activity
+                                (link_id, user_id, event, link_user_count, updated_at) VALUES
+                                (:link_id, :user_id, 0, 0, NOW())";
+                        $stmt = $PDOX->queryReturnError($sql, array(
+                            ':link_id' => $row['link_id'],
+                            ':user_id' => $row['user_id']
+                        ));
+
+                        if ( ! $stmt->success ) {
+                            error_log("Unable to create user activity record link=".$row['user_id']);
+                        }
+                    }
+
+                    $ent = new \Tsugi\Event\Entry();
+                    if ( $link_activity ) $ent->deSerialize($link_activity);
+                    $ent->total = $link_count;
+                    $ent->click();
+                    $activity = $ent->serialize(self::MAX_ACTIVITY);
+                    $sql = "UPDATE {$CFG->dbprefix}lti_link_user_activity
+                        SET activity=:activity, updated_at=NOW(), link_user_count=link_user_count+1
+                        WHERE link_id = :link_id AND user_id = :user_id AND event = 0";
+                    $stmt = $PDOX->queryReturnError($sql, array(
+                        ':link_id' => $row['link_id'],
+                        ':user_id' => $row['user_id'],
+                        ':activity' => $activity
+                    ));
+
+                    if ( ! $stmt->success ) {
+                        error_log("Unable to update user activity record link=".$row['user_id']);
+                    }
+                }
+            }
+
+            // Now the place the event into the circular buffer
+            if ( $CFG->eventcheck !== false ) {
+                // https://stackoverflow.com/questions/3554296/how-to-store-hashes-in-mysql-databases-without-using-text-fields
+                $event_nonce = $row['nonce'].':'.$row['key_key'];
+                $event_launch = null;
+                $canvasUrl = U::get($request_data,'custom_sub_canvas_caliper_url');
+                if ( $canvasUrl ) {
+                    $event_launch = 'canvas::'.$canvasUrl;
+                }
+
+                $sql = "INSERT INTO {$CFG->dbprefix}lti_event
+                        (event, key_id, context_id, link_id, user_id, nonce, launch, updated_at) VALUES
+                        (0, :key_id, :context_id, :link_id, :user_id, UNHEX(MD5(:nonce)), :launch, NOW())";
+                $stmt = $PDOX->queryReturnError($sql, array(
+                    ':key_id' => U::get($row, 'key_id'),
+                    ':context_id' => U::get($row, 'context_id'),
+                    ':link_id' => U::get($row, 'link_id'),
+                    ':user_id' => U::get($row, 'user_id'),
+                    ':nonce' => $event_nonce,
+                    ':launch' => $event_launch
+                ));
+
+                if ( ! $stmt->success ) {
+                    error_log("Unable to insert event record");
+                }
+                $row['event_nonce'] = $event_nonce;
+                $row['event_launch'] = $event_launch;
+            }
+
+            // Probabilistically cleanup event table
+            if ( $CFG->eventcheck > 0 ) {
+                if ( (time() % $CFG->eventcheck) == 0 ) {
+                    $stmt = $PDOX->queryDie("DELETE FROM {$CFG->dbprefix}lti_event WHERE
+                        created_at < DATE_ADD(CURRENT_TIMESTAMP(), INTERVAL -{$CFG->eventtime} SECOND)");
+                    error_log("Event table cleanup rows=".$stmt->rowCount());
+                }
             }
         }
+
+        // Make sure we debounce really fast relaunches
         self::wrapped_session_put($session_object, 'tsugi_permanent_start_time', time());
 
-        // Put the information into the row variable
+        // Encrypt the secret before placing in the session
         $row['secret'] = self::encrypt_secret($row['secret']);
+
+        // Put the information into the row variable and put row into session
         self::wrapped_session_put($session_object, 'lti', $row);
         self::wrapped_session_put($session_object, 'lti_post', $request_data);
 
@@ -588,6 +714,8 @@ class LTIX {
         $retval['context_title'] = isset($FIXED['context_title']) ? $FIXED['context_title'] : null;
         $retval['link_title'] = isset($FIXED['resource_link_title']) ? $FIXED['resource_link_title'] : null;
 
+        $retval['user_locale'] = isset($FIXED['launch_presentation_locale']) ? $FIXED['launch_presentation_locale'] : null;
+
         // Getting email from LTI 1.x and LTI 2.x
         $retval['user_email'] = isset($FIXED['lis_person_contact_email_primary']) ? $FIXED['lis_person_contact_email_primary'] : null;
         $retval['user_email'] = isset($FIXED['custom_person_email_primary']) ? $FIXED['custom_person_email_primary'] : $retval['user_email'];
@@ -635,6 +763,17 @@ class LTIX {
             if ( ! ( strpos($roles,'administrator') === false ) ) $retval['role'] = 5000;
             // Local superuser would be 10000
         }
+
+        // Copy in some extensions.  Backwards compatibility for canvas xapi urls in legacy cartridges
+        $sub_canvas_caliper_url = U::get($FIXED,'sub_canvas_xapi_url');
+        if ( $sub_canvas_caliper_url ) {
+            $sub_canvas_caliper_url = str_replace('xapi','caliper',$sub_canvas_caliper_url);
+        }
+        $sub_canvas_caliper_url = U::get($FIXED,'sub_canvas_caliper_url', $sub_canvas_caliper_url);
+        if ($sub_canvas_caliper_url ) $retval['sub_canvas_caliper_url'] = $sub_canvas_caliper_url;
+
+        $sub_caliper_url = U::get($FIXED,'sub_caliper_url');
+        if ($sub_caliper_url ) $retval['sub_caliper_url'] = $sub_caliper_url;
         return $retval;
     }
 
@@ -655,22 +794,25 @@ class LTIX {
      * LEFT JOIN.
      */
     public static function loadAllData($p, $profile_table, $post) {
+        global $CFG;
         $PDOX = self::getConnection();
         $errormode = $PDOX->getAttribute(\PDO::ATTR_ERRMODE);
         $PDOX->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
         // Add the fields
+        // TODO: Add user_locale
         $sql = "SELECT k.key_id, k.key_key, k.secret, k.new_secret, k.settings_url AS key_settings_url,
             n.nonce,
             c.context_id, c.title AS context_title, context_sha256, c.settings_url AS context_settings_url,
             c.ext_memberships_id AS ext_memberships_id, c.ext_memberships_url AS ext_memberships_url,
-            c.lineitems_url AS lineitems_url, c.memberships_url AS memberships_url,c.lms_course_code AS lms_course_code,
+            c.lineitems_url AS lineitems_url, c.memberships_url AS memberships_url,
             l.link_id, l.path AS link_path, l.title AS link_title, l.settings AS link_settings, l.settings_url AS link_settings_url,
             u.user_id, u.displayname AS user_displayname, u.email AS user_email, user_key, u.image AS user_image,
+            u.locale AS user_locale,
             u.subscribe AS subscribe, u.user_sha256 AS user_sha256,
             m.membership_id, m.role, m.role_override,
             r.result_id, r.grade, r.result_url, r.sourcedid";
-        
+
         if ( $profile_table ) {
             $sql .= ",
             p.profile_id, p.displayname AS profile_displayname, p.email AS profile_email,
@@ -680,6 +822,12 @@ class LTIX {
         if ( $post['service'] ) {
             $sql .= ",
             s.service_id, s.service_key AS service";
+        }
+
+        if ( $CFG->launchactivity ) {
+            $sql .= ",
+                a.link_count, a.activity AS link_activity,
+                au.link_user_count, au.activity AS link_user_activity";
         }
 
         // Add the JOINs
@@ -699,6 +847,12 @@ class LTIX {
         if ( $post['service'] ) {
             $sql .= "
             LEFT JOIN {$p}lti_service AS s ON k.key_id = s.key_id AND s.service_sha256 = :service";
+        }
+
+        if ( $CFG->launchactivity ) {
+            $sql .= "
+            LEFT JOIN {$p}lti_link_activity AS a ON a.link_id = l.link_id AND a.event = 0
+            LEFT JOIN {$p}lti_link_user_activity AS au ON au.link_id = l.link_id AND au.user_id = u.user_id AND au.event = 0";
         }
 
         // Add the WHERE clause
@@ -749,7 +903,7 @@ class LTIX {
     /**
      * Make sure that the data in our lti_ tables matches the POST data
      *
-     * This routine compares the POST dat to the data pulled from the
+     * This routine compares the POST data to the data pulled from the
      * lti_ tables and goes through carefully INSERTing or UPDATING
      * all the nexessary data in the lti_ tables to make sure that
      * the lti_ table correctly match all the data from the incoming post.
@@ -761,8 +915,7 @@ class LTIX {
      * any new or updated data and so this code just falls through and
      * does absolutely no SQL.
      */
-    public static function adjustData($p, &$row, $post, $needed,$request_data=false) {
-        print_r($post);
+    public static function adjustData($p, &$row, $post, $needed) {
 
         $PDOX = self::getConnection();
 
@@ -798,7 +951,7 @@ class LTIX {
                 ':settings_url' => $post['link_settings_url'],
                 ':title' => $post['link_title'],
                 ':context_id' => $row['context_id'],
-                ':path' => $post['link_path'],
+                ':path' => $post['link_path']
             ));
             $row['link_id'] = $PDOX->lastInsertId();
             $row['link_title'] = $post['link_title'];
@@ -807,29 +960,27 @@ class LTIX {
             $actions[] = "=== Inserted link id=".$row['link_id']." ".$row['link_title'];
         }
 
-        
         $user_displayname = isset($post['user_displayname']) ? $post['user_displayname'] : null;
         $user_email = isset($post['user_email']) ? $post['user_email'] : null;
-        $lms_defined_id = isset($request_data['ext_d2l_orgdefinedid']) ? $request_data['ext_d2l_orgdefinedid'] : null;
-        $lms_username = isset($request_data['ext_d2l_username']) ? $request_data['ext_d2l_username'] : null;
-        $lms_role = isset($request_data['ext_d2l_role']) ? $request_data['ext_d2l_role'] : null;
+        $user_image = isset($post['user_image']) ? $post['user_image'] : null;
+        $user_locale = isset($post['user_locale']) ? $post['user_locale'] : null;
         if ( $row['user_id'] === null && isset($post['user_id']) ) {
             $sql = "INSERT INTO {$p}lti_user
-                ( user_key, user_sha256, displayname, email, key_id, created_at, updated_at,lms_defined_id,lms_username,lms_rolename) VALUES
-                ( :user_key, :user_sha256, :displayname, :email, :key_id, NOW(), NOW(),:LMSID,:LMSUSER,:LMSROLE)";
+                ( user_key, user_sha256, displayname, email, image, locale, key_id, created_at, updated_at ) VALUES
+                ( :user_key, :user_sha256, :displayname, :email, :image, :locale, :key_id, NOW(), NOW() )";
             $PDOX->queryDie($sql, array(
                 ':user_key' => $post['user_id'],
                 ':user_sha256' => lti_sha256($post['user_id']),
                 ':displayname' => $user_displayname,
                 ':email' => $user_email,
-                ':key_id' => $row['key_id'],
-                ':LMSID' => $lms_defined_id,
-                ':LMSUSER' => $lms_username,
-                ':LMSROLE' => $lms_role
-                ));
+                ':image' => $user_image,
+                ':locale' => $user_locale,
+                ':key_id' => $row['key_id']));
             $row['user_id'] = $PDOX->lastInsertId();
             $row['user_email'] = $user_email;
             $row['user_displayname'] = $user_displayname;
+            $row['user_image'] = $user_image;
+            $row['user_locale'] = $user_locale;
             $row['user_key'] = $post['user_id'];
             $actions[] = "=== Inserted user id=".$row['user_id']." ".$row['user_email'];
         }
@@ -929,36 +1080,6 @@ class LTIX {
             $actions[] = "=== Updated context=".$row['context_id']." title=".$post['context_title'];
         }
 
-        //We handle changes in lms_course_code
-        if ( isset($request_data['context_label']) && $request_data['context_label'] != $row['lms_course_code'] ) {
-        $sql = "UPDATE {$p}lti_context SET lms_course_code = :LMS_CC WHERE context_id = :context_id";
-        $PDOX->queryDie($sql, array(
-            ':LMS_CC' => $request_data['context_label'],
-            ':context_id' => $row['context_id']));
-        $row['lms_course_code'] = $request_data['context_label'];
-        $actions[] = "=== Updated context=".$row['lms_course_code']." title=".$request_data['context_label'];
-        }
-
-        // Update with FCI Type
-        // IF statement?
-
-        if (isset($request_data['custom_fcitype']) && isset($row['link_id']) && $request_data['custom_fcitype'] != $row['fci_type']) {
-            $sql="UPDATE {$p}lti_link SET fci_type = :fci_type WHERE link_id = :link_id";
-            $PDOX->queryDie($sql, array(
-                ':fci_type' => $request_data['custom_fcitype'],
-                ':link_id' => $row['link_id']
-            ));
-
-/*
-            $sql="UPDATE {$p}lti_result SET fci_type = :fci_type WHERE link_id = :link_id";
-            $PDOX->queryDie($sql, array(
-                ':fci_type' => $request_data['custom_fcitype'],
-                ':link_id' => $row['link_id']
-            ));
-*/
-
-  }
-        
         // Grab the context scoped service URLs...
         $context_services = array('ext_memberships_id', 'ext_memberships_url', 'lineitems_url', 'memberships_url');
         if ( isset($row['context_id']) ) {
@@ -993,7 +1114,7 @@ class LTIX {
         }
 
         // Grab the user scoped fields...
-        $user_fields = array('displayname', 'email', 'image');
+        $user_fields = array('displayname', 'email', 'image', 'locale');
         if ( isset($row['user_id']) ) {
             foreach($user_fields as $u_field ) {
                 $user_field = 'user_'.$u_field;
@@ -1160,7 +1281,7 @@ class LTIX {
         // This happens from time to time when someone closes and reopens a laptop
         // Or their computer goes to sleep and wakes back up hours later.
         // So it is just a warning - nothing much we can do except tell them.
-        if ( count($needed) > 0 && self::wrapped_session_get($session_object, 'lti',false) === false ) {
+        if ( count($needed) > 0 && self::wrapped_session_get($session_object, 'lti',null) === null ) {
             self::send403(); error_log('Session expired - please re-launch '.session_id());
             die('Session expired - please re-launch'); // with error_log
         }
@@ -1203,6 +1324,7 @@ class LTIX {
         $session_script = self::wrapped_session_get($session_object, 'script_path', null);
         if ( $session_script !== null &&
             (! endsWith(Output::getUtilUrl(''), $CFG->getScriptPath()) ) &&
+            (! startsWith('api', $CFG->getScriptPath()) ) &&
             strpos($CFG->getScriptPath(), $session_script ) !== 0 ) {
             self::send403();
             self::abort_with_error_log('Improper navigation detected', " ".session_id()." script_path ".
@@ -1240,30 +1362,12 @@ class LTIX {
                 if ( count($pieces) > 0 ) $USER->firstname = $pieces[0];
                 if ( count($pieces) > 1 ) $USER->lastname = $pieces[count($pieces)-1];
             }
-            $USER->instructor = isset($LTI['role']) && $LTI['role'] == 5000 ;
-            $USER->ASC = isset($LTI['role']) && $LTI['role'] == 1000 ;
-            $USER->student = isset($LTI['role']) && $LTI['role'] == 0 ;
-
-            $USER->giveFeedback = false;
-            $USER->modifyQuestion = false;
-            $USER->readonlyView = false;
-            $USER->individualView = false;
-
-            // Get permissions
-            if (isset($LTI['role'])) {
-                $sql = "SELECT give_feedback, modify_question, readonly_view, individual_view FROM lms_role_permissions WHERE lms_role_number = :roleNumber";
-                $result = $PDOX->queryDie($sql, array(
-                    ":roleNumber" => $LTI['role']
-                ));
-
-                foreach ($result as $resultLine) {
-                    $USER->giveFeedback = $resultLine['give_feedback'];
-                    $USER->modifyQuestion = $resultLine['modify_question'];
-                    $USER->readonlyView = $resultLine['readonly_view'];
-                    $USER->individualView = $resultLine['individual_view'];
-                }
+            if (isset($LTI['user_image']) ) $USER->image = $LTI['user_image'];
+            if (isset($LTI['user_locale']) ) $USER->locale = $LTI['user_locale'];
+            if ( $USER->locale ) {
+                U::setLocale($USER->locale);
             }
-
+            $USER->instructor = isset($LTI['role']) && $LTI['role'] != 0 ;
             $TSUGI_LAUNCH->user = $USER;
         }
 
@@ -1279,7 +1383,10 @@ class LTIX {
             $LINK = new \Tsugi\Core\Link();
             $LINK->launch = $TSUGI_LAUNCH;
             $LINK->id = $LTI['link_id'];
-            if (isset($LTI['link_title']) ) $LINK->title = $LTI['link_title'];
+            if (isset($LTI['link_count']) ) $LINK->activity = $LTI['link_count']+0;
+            if (isset($LTI['link_user_count']) ) $LINK->user_activity = $LTI['link_user_count']+0;
+
+            // The activity (Don't make global to avoid bad habits)
             $TSUGI_LAUNCH->link = $LINK;
         }
 
@@ -1438,9 +1545,9 @@ class LTIX {
     public static function caliperSend($caliperBody, $content_type='application/json', &$debug_log=false)
     {
 
-        $caliperURL = LTIX::ltiRawParameter('custom_sub_canvas_caliper_url');
+        $caliperURL = LTIX::ltiRawParameter('custom_sub_canvas_xapi_url');
         if ( strlen($caliperURL) == 0 ) {
-            if ( is_array($debug_log) ) $debug_log[] = array('custom_sub_canvas_caliper_url not found in launch data');
+            if ( is_array($debug_log) ) $debug_log[] = array('custom_sub_canvas_xapi_url not found in launch data');
             return false;
         }
 
@@ -1493,8 +1600,8 @@ class LTIX {
         $PDOX = self::getConnection();
         $host = parse_url($url, PHP_URL_HOST);
         $port = parse_url($url, PHP_URL_PORT);
-        $key_id = self::ltiParameter('key_id', false);
-        if ( $key_id == false ) return false;
+        $key_id = self::ltiParameter('key_id', null);
+        if ( $key_id == null ) return false;
 
         $sql = "SELECT consumer_key, secret FROM {$CFG->dbprefix}lti_domain
             WHERE domain = :DOM AND key_id = :KID";
@@ -1877,6 +1984,9 @@ class LTIX {
         if ($return_url === null) {
             // make the msg a bit friendlier
             $msg = "The LTI launch failed. Please reference the following error message when reporting this failure:<br><br>$msg";
+            if ( $extra && ! headers_sent() ) {
+                header('X-Tsugi-Error-Detail: '.$extra);
+            }
             die_with_error_log($msg,$extra,$prefix);
         }
         $return_url .= ( strpos($return_url,'?') > 0 ) ? '&' : '?';
@@ -1916,5 +2026,4 @@ class LTIX {
 
         return true;
     }
-
 }
