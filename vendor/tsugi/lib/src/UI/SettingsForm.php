@@ -299,6 +299,7 @@ class SettingsForm {
     {
         global $USER;
 /*
+
         return; // Deprecated
         $userRole = $USER->determineUserRole($USER->id);
         if ( ! $userRole ) return;
