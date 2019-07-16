@@ -86,13 +86,21 @@ if ( isset($_POST) ) {
 	    
 	    echo "UPDATE lti_result SET json = " . json_encode($json) . ", instructor_id = " . $USER->id . ", instructor_updated=NOW() WHERE result_id = " . $row['result_id'];
 echo "<br />";
-        $stmt = $PDOX->queryDie(
-        "UPDATE {$CFG->dbprefix}lti_result SET json = :json, instructor_id = :instructor_id, instructor_updated=NOW() WHERE result_id = :RID",
+//         $stmt = $PDOX->queryDie(
+//         "UPDATE {$CFG->dbprefix}lti_result SET json = :json, instructor_id = :instructor_id, instructor_updated=NOW() WHERE result_id = :RID",
+//         array(
+//             ':json' => json_encode($json),
+//             ':RID' => $row['result_id'],
+//             ':instructor_id' => $USER->id)
+//         );
+	    
+	    $stmt = $PDOX->rowDie(
+		        "UPDATE {$CFG->dbprefix}lti_result SET json = :json, instructor_id = :instructor_id, instructor_updated=NOW() WHERE result_id = :RID",
         array(
             ':json' => json_encode($json),
             ':RID' => $row['result_id'],
             ':instructor_id' => $USER->id)
-        );
+		    );
 
         ?>
 
