@@ -75,7 +75,6 @@ if ( isset($_POST['gift']) ) {
         $actions[] = "=== Updated link=".$_SESSION['lti']['link_id'];
     }
 
-
     $_SESSION['success'] = 'Flex Check-In updated';
     unset($_SESSION['gift']);
     header( 'Location: '.addSession('index.php') ) ;
@@ -176,7 +175,7 @@ $OUTPUT->flashMessages();
     <hr>
     <div style ="text-align: center;">
         <?php
-        if (date('d') >= 20 && date('d') <= 25) {
+        if (date('d') >= 1 && date('d') <= 31) {
             ?>
             <form method="post" style="display: inline-block;margin-left:5%;text-align: left;">
                 <p><b>Flex Check-In Question :</b></p>
