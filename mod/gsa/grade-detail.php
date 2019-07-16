@@ -96,9 +96,9 @@ echo "<br />";
 
         ?>
 
-<!--         <script type="text/javascript">
-            location='<?php // echo(addSession('grades.php'));?>';
-        </script> -->
+        <script type="text/javascript">
+            location='<?php echo(addSession('grades.php'));?>';
+        </script>
 
         <?php
     }
