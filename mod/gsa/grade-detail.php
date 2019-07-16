@@ -12,7 +12,7 @@ use \Tsugi\Core\LTIX;
 use \Tsugi\Grades\GradeUtil;
 
 $LAUNCH = LTIX::requireData();
-$userRole = $USER->determineUserRole($USER->id);
+$userRole = $USER->instructor;
 
 // Get the user's grade data also checks session
 $row = GradeUtil::gradeLoad($_REQUEST['user_id']);
@@ -83,24 +83,14 @@ if ( isset($_POST) ) {
             $retval = LTIX::gradeSend($gradetosend,$resultRow, $debug_log);
             $_SESSION['debug_log'] = $debug_log;
         }
-	    
-	    echo "UPDATE lti_result SET json = " . json_encode($json) . ", instructor_id = " . $USER->id . ", instructor_updated=NOW() WHERE result_id = " . $row['result_id'];
-echo "<br />";
-//         $stmt = $PDOX->queryDie(
-//         "UPDATE {$CFG->dbprefix}lti_result SET json = :json, instructor_id = :instructor_id, instructor_updated=NOW() WHERE result_id = :RID",
-//         array(
-//             ':json' => json_encode($json),
-//             ':RID' => $row['result_id'],
-//             ':instructor_id' => $USER->id)
-//         );
-	    
-	    $stmt = $PDOX->rowDie(
-		        "UPDATE {$CFG->dbprefix}lti_result SET json = :json, instructor_id = :instructor_id, instructor_updated=NOW() WHERE result_id = :RID",
+
+        $stmt = $PDOX->queryDie(
+        "UPDATE {$CFG->dbprefix}lti_result SET json = :json, instructor_id = :instructor_id, instructor_updated=NOW() WHERE result_id = :RID",
         array(
             ':json' => json_encode($json),
             ':RID' => $row['result_id'],
             ':instructor_id' => $USER->id)
-		    );
+        );
 
         ?>
 
@@ -165,7 +155,7 @@ $OUTPUT->header();
         </p>
     <h3>Instructor Feedback </h3>
     <?php
-    if (!$userRole) {
+    if (!$USER->instructor) {
     ?>
         <p>
             <textarea name ="feedback" size="100" rows="5" cols="80"><?php
