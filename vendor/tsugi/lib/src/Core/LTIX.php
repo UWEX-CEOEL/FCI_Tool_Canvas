@@ -892,7 +892,7 @@ class LTIX {
             $PDOX->queryDie($sql, array(
                 ':link_id' => $row['link_id'],
                 ':user_id' => $row['user_id'],
-                ':currentSectionTerm' => $_POST['custom_dxjCanvas_Section'],
+                ':currentSectionTerm' => $_POST['custom_dxjcanvas_section'],
                 ':fciType' => $_POST['custom_fcitype']));
             $row['result_id'] = $PDOX->lastInsertId();
             $actions[] = "=== Inserted result id=".$row['result_id'];
