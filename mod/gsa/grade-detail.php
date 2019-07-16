@@ -83,6 +83,8 @@ if ( isset($_POST) ) {
             $retval = LTIX::gradeSend($gradetosend,$resultRow, $debug_log);
             $_SESSION['debug_log'] = $debug_log;
         }
+	    
+	    echo "Got here!";
 
         $stmt = $PDOX->queryDie(
         "UPDATE {$CFG->dbprefix}lti_result SET json = :json, instructor_id = :instructor_id, instructor_updated=NOW() WHERE result_id = :RID",
@@ -94,9 +96,9 @@ if ( isset($_POST) ) {
 
         ?>
 
-        <script type="text/javascript">
-            location='<?php echo(addSession('grades.php'));?>';
-        </script>
+<!--         <script type="text/javascript">
+            location='<?php // echo(addSession('grades.php'));?>';
+        </script> -->
 
         <?php
     }
