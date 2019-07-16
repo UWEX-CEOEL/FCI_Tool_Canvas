@@ -165,8 +165,8 @@ class Result extends Entity {
         // Get the IP Address
         $ipaddr = Net::getIP();
 
-        // Update result in the database and in the LTI session area and 
-        // our local copy 
+        // Update result in the database and in the LTI session area and
+        // our local copy
         $ltidata = $this->session_get('lti');
         if ( $ltidata ) {
             $ltidata['grade'] = $grade;
@@ -304,5 +304,29 @@ class Result extends Entity {
                 ':json' => $json,
                 ':RID' => $this->id)
         );
+    }
+
+    public function wipeRepeats($resultId, $currentTerm, $currentUser) {
+      global $CFG, $PDOX;
+
+
+      $resultRecord = $PDOX->rowDie("SELECT user_id, current_section_term FROM {$CFG->dbprefix}lti_result WHERE result_id = :resultId",
+      array(':resultId' => $resultId));
+
+      $recordedSection = $resultRecord['current_section_term'];
+      $recordedUser = $resultRecord['user_id'];
+
+      // Check to ensure everything is properly set
+      if (isset($recordedSection) && isset($recordedUser) && $recordedSection != null && $recordedUser != null) {
+        // Check to ensure this is the current user
+        if ($recordedUser == $currentUser) {
+
+          if ($currentTerm != $recordedSection) {
+
+            $PDOX->queryDie("UPDATE {$CFG->dbprefix}lti_result SET grade = null, json = null, current_section_term = :newSectionTerm WHERE result_id = :resultId AND user_id = :userId",
+            array(':newSectionTerm' => $currentTerm, ':resultId' => $resultId, ':userId' => $currentUser));
+          }
+        }
+      }
     }
 }
