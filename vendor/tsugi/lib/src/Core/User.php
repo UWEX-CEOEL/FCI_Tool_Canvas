@@ -7,7 +7,7 @@ use \Tsugi\Core\Cache;
 /**
  * This is a class to provide access to the resource context level data.
  *
- * This data comes from the LTI launch from the LMS. 
+ * This data comes from the LTI launch from the LMS.
  * A context is the equivalent of a "class" or course.   A context
  * has a roster of users and each user has a role within the context.
  * A launch may or may not contain a context.  If there
@@ -51,7 +51,7 @@ class User {
     public $instructor = false;
 
     /**
-     * Construct the user's name / email combination 
+     * Construct the user's name / email combination
      */
     public function getNameAndEmail() {
         $display = '';
@@ -85,7 +85,7 @@ class User {
     /**
      * Load a user's info from the user_id
      *
-     * We make sure that the user is a member of the current 
+     * We make sure that the user is a member of the current
      * context so as not to slide across silos.
      */
     public static function loadUserInfoBypass($user_id)
@@ -107,5 +107,18 @@ class User {
         }
         Cache::set($cacheloc, $user_id, $row);
         return $row;
+    }
+
+    public static function determineUserRole($user_id) {
+      global $CFG, $PDOX, $CONTEXT;
+
+      $sql = "SELECT lms_rolename FROM {$CFG->dbprefix}lti_user WHERE user_id = :UID";
+      $row = $PDOX->rowDie($sql, array(':UID' => $user_id));
+
+      if (fnmatch('*TeacherEnrollment*', $row['lms_rolename'])) {
+          return true;
+      } else {
+          return false;
+      }
     }
 }

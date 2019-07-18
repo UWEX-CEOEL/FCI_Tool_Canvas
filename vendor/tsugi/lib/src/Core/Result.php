@@ -165,8 +165,8 @@ class Result extends Entity {
         // Get the IP Address
         $ipaddr = Net::getIP();
 
-        // Update result in the database and in the LTI session area and 
-        // our local copy 
+        // Update result in the database and in the LTI session area and
+        // our local copy
         $ltidata = $this->session_get('lti');
         if ( $ltidata ) {
             $ltidata['grade'] = $grade;
@@ -305,11 +305,13 @@ class Result extends Entity {
                 ':RID' => $this->id)
         );
     }
+
     
     /**
      * Wipe repeats when sections are different
     */
   public function wipeRepeats($resultId, $currentTerm, $currentUser) {
+  
       global $CFG, $PDOX;
 
 

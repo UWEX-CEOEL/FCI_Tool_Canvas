@@ -62,7 +62,8 @@ class UI {
                                         FROM {$p}lti_result AS R
                                         JOIN {$p}lti_user AS U ON R.user_id = U.user_id
                                         WHERE R.link_id = :LID AND
-                                        (grade IN ('',0) OR grade IS NULL) AND
+                                        (grade IN ('',0) OR grade IS NULL)
+                                        AND
                                         substring(R.sis_enrollment_id, -4, 4) IN (SELECT term_id
                                                                   FROM {$p}fci_term
                                                                   WHERE sysdate() BETWEEN term_start_dt AND term_end_dt)

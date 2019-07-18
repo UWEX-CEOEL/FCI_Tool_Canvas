@@ -91,6 +91,14 @@ if ( isset($_POST) ) {
             ':RID' => $row['result_id'],
             ':instructor_id' => $USER->id)
         );
+	    
+// 	    $stmt = $PDOX->rowDie(
+// 		        "UPDATE {$CFG->dbprefix}lti_result SET json = :json, instructor_id = :instructor_id, instructor_updated=NOW() WHERE result_id = :RID",
+//         array(
+//             ':json' => json_encode($json),
+//             ':RID' => $row['result_id'],
+//             ':instructor_id' => $USER->id)
+// 		    );
 
         ?>
 
