@@ -306,7 +306,12 @@ class Result extends Entity {
         );
     }
 
-    public function wipeRepeats($resultId, $currentTerm, $currentUser) {
+    
+    /**
+     * Wipe repeats when sections are different
+    */
+  public function wipeRepeats($resultId, $currentTerm, $currentUser) {
+  
       global $CFG, $PDOX;
 
 
