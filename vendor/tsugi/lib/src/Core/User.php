@@ -109,6 +109,12 @@ class User {
         return $row;
     }
 
+    /**
+     * Load a user's info from the user_id
+     *
+     * We look up the user's information to determine whether the user is enrolled as a teacher or not and 
+     * return a boolean accordingly.
+     */
     public static function determineUserRole($user_id) {
       global $CFG, $PDOX, $CONTEXT;
 
