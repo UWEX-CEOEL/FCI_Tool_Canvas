@@ -35,8 +35,12 @@ $fciState;
 //   $USER->setInstructor(1);
 // }
 
+// Determine whether or not the user is an instructor
+// instructor = true
+// not an instructor = false
 $userRole = $USER->determineUserRole($USER->id);
 
+// If this isn't an instructor, check if they're a repeat student and, if so, wipe previous attempt
 if (!$userRole) {
     $RESULT->wipeRepeats($resultId, $currentTerm, $USER->id);
 }
