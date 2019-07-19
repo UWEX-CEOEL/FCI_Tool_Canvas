@@ -333,7 +333,7 @@ class Result extends Entity {
 
           if ($currentTerm != $recordedSection) {
 
-            $PDOX->queryDie("UPDATE {$CFG->dbprefix}lti_result SET grade = null, json = null, current_section_term = :newSectionTerm WHERE result_id = :resultId AND user_id = :userId",
+            $PDOX->queryDie("UPDATE {$CFG->dbprefix}lti_result SET grade = null, json = null, current_section_term = :newSectionTerm, fci_state = 1 WHERE result_id = :resultId AND user_id = :userId",
             array(':newSectionTerm' => $currentTerm, ':resultId' => $resultId, ':userId' => $currentUser));
           }
         }
