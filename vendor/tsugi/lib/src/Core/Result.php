@@ -308,7 +308,12 @@ class Result extends Entity {
 
     
     /**
-     * Wipe repeats when sections are different
+     * Sends the current result id, the current term's id (the current section's id), and the current user's id
+     * 
+     * Looks up the section id stored on the result record and compares it to the current section's id (there's a 
+     * new section for every term). If the ids are different, this means the student is repeating the course in a 
+     * later term. Therefore, wipe the student's response, the instructor's feedback, and the original grade and 
+     * update the section id with the current section id.
     */
   public function wipeRepeats($resultId, $currentTerm, $currentUser) {
   
