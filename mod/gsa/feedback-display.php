@@ -25,7 +25,7 @@ $currentUser = $USER->displayname;
 
         $studentId = $_GET['student'];
         $resultId = $_GET['result'];
-        $fciType = LTIX::ltiCustomGet('fcitype');
+        $fciType = LTIX::ltiCustomGet('fci_type');
         $displayNoResult = true;
 
         $sql = "SELECT f.json, f.user_updated, f.instructor_updated, u.displayname, f.instructor_id FROM lti_result as r RIGHT JOIN fci_result_history AS f ON r.result_id = f.result_id INNER JOIN lti_user AS u ON f.user_id = u.user_id WHERE f.result_id = :resultId AND f.instructor_id = :instructorId AND f.user_id = :studentId AND r.fci_type = :fciType ORDER BY saved_timestamp DESC";
