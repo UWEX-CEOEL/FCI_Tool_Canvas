@@ -896,7 +896,7 @@ class LTIX {
                 ':link_id' => $row['link_id'],
                 ':user_id' => $row['user_id'],
                 ':currentSectionTerm' => $_POST['custom_dxjcanvas_section'],
-                ':fciType' => $_POST['custom_fcitype']));
+                ':fciType' => $_POST['custom_fci_type']));
             $row['result_id'] = $PDOX->lastInsertId();
             $actions[] = "=== Inserted result id=".$row['result_id'];
        }
@@ -954,10 +954,10 @@ class LTIX {
         // Update with FCI Type
         // IF statement?
 
-        if (isset($request_data['custom_fcitype']) && isset($row['link_id']) && $_POST['custom_fcitype'] != $row['fci_type']) {
+        if (isset($request_data['custom_fci_type']) && isset($row['link_id']) && $_POST['custom_fci_type'] != $row['fci_type']) {
             $sql="UPDATE {$p}lti_link SET fci_type = :fci_type WHERE link_id = :link_id";
             $PDOX->queryDie($sql, array(
-                ':fci_type' => $_POST['custom_fcitype'],
+                ':fci_type' => $_POST['custom_fci_type'],
                 ':link_id' => $row['link_id']
             ));
 
