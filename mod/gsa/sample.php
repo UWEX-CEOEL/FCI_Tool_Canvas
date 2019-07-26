@@ -5,15 +5,15 @@ function displayProperGIFT() {
 
     $LAUNCH = LTIX::requireData();
 
-    if (LTIX::ltiCustomGet('fcitype') == 'M1') {
+    if (LTIX::ltiCustomGet('fci_type') == 'M1') {
         return "::Q1:: Review the competency set objectives and competency assessments.  As you compare these to your current knowledge and skills, which competency is most familiar to you and which competency will require the most learning and preparatory work on your part?  Please add some explanation for each. {}
 
             ";
-    } else if (LTIX::ltiCustomGet('fcitype') == 'M2') {
+    } else if (LTIX::ltiCustomGet('fci_type') == 'M2') {
         return "::Q1:: Consider your progress so far; what strategies have worked best for you?  Are there areas that remain a concern for you?  Why are they challenging? {}
 
         ";
-    } else if (LTIX::ltiCustomGet('fcitype') == 'M3') {
+    } else if (LTIX::ltiCustomGet('fci_type') == 'M3') {
         return "::Q1:: Reflect on what you have learned in this competency set so far: How do the competencies mastered apply at your workplace or advance your career? {}
 
         ";
