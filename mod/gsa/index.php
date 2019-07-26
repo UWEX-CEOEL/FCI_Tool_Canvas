@@ -22,7 +22,7 @@ function percent($x) {
 
 $LAUNCH = LTIX::requireData();
 $p = $CFG->dbprefix;
-$fciType = LTIX::ltiCustomGet('fcitype');
+$fciType = LTIX::ltiCustomGet('fci_type');
 $resultId = $_SESSION['lti']['result_id'];
 $currentTerm = $_SESSION['lti_post']['custom_dxjcanvas_section'];
 $fciState;
