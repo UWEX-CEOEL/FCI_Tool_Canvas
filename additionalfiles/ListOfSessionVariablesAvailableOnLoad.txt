@@ -64,7 +64,7 @@ Array (
             [custom_dxjcanvas_section] => 
             [custom_dxjcanvas_sissection] => 
             [custom_dxjcanvas_user] => 
-            [custom_fcitype] => 
+            [custom_fci_type] => 
             [ext_roles] => 
             [launch_presentation_document_target] => 
             [launch_presentation_locale] => 
