@@ -95,8 +95,8 @@ if ( isset($_POST['gift']) ) {
 
     $_SESSION['success'] = 'Flex Check-In updated';
     unset($_SESSION['gift']);
-    header( 'Location: '.addSession('index.php') ) ;
-    return;
+//     header( 'Location: '.addSession('index.php') ) ;
+//     return;
 }
 
 // Load up the quiz
