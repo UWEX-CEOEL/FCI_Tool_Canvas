@@ -77,7 +77,7 @@ if ( isset($_POST['gift']) ) {
 	
 	// Get link information to update link history table
 	$sql = "SELECT link_sha256, link_key, created_at, updated_at FROM {$p}lti_link WHERE link_id = :link_id";
-	$currentLink (array) = $PDOX->rowDie($sql, array(
+	$currentLink = $PDOX->rowDie($sql, array(
 		':link_id'=>$_SESSION['lti']
 	));
 
