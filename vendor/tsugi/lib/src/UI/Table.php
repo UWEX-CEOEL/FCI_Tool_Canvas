@@ -402,7 +402,7 @@ class Table {
 
         //echo("<pre>\n$newsql\n</pre>\n");
         
-        echo $sql;
+        echo $newsql;
 
         $rows = $PDOX->allRowsDie($newsql, $query_parms);
 
