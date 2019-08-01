@@ -73,24 +73,6 @@ if ( isset($_POST['gift']) ) {
             ':instructor_id'=>$USER->id,
             ':link_id'=>$_SESSION['lti']['link_id']));
         $actions[] = "=== Updated link=".$_SESSION['lti']['link_id'];
-	    
-// 	// Get link information to update link history table
-// 	$sql = "SELECT link_sha256, link_key, created_at, updated_at FROM {$p}lti_link WHERE link_id = :link_id";
-// 	$currentLink = $PDOX->rowDie($sql, array(
-// 		':link_id'=>$_SESSION['lti']
-// 		));
-	    
-// 	// Update link history table
-// 	$sql = "INSERT INTO {$p}fci_link_history (link_id, link_sha256, link_key, json, created_at, instructor_id, saved_timestamp) VALUES (:link_id, :link_sha256, :link_key, :json, :created_at, :instructor_id, :saved_timestamp)";
-// 	$PDOX->queryDie($sql, array(
-// 			':link_id'=>$_SESSION['lti']['link_id'],
-// 			':link_sha256'=>$currentLink['link_sha256'],
-// 			':link_key'=>$currentLink['link_key'],
-// 			':json'=>$gift,
-// 			':created_at'=>$currentLink['created_at'],
-// 			':instructor_id'=>$USER->id,
-// 			':saved_timestamp'=>$currentLink['updated_at']
-// 		));
     }
 
     $_SESSION['success'] = 'Flex Check-In updated';
@@ -193,7 +175,7 @@ $OUTPUT->flashMessages();
     <hr>
     <div style ="text-align: center;">
         <?php
-        if (date('d') >= 1 && date('d') <= 25) {
+        if (date('d') >= 20 && date('d') <= 31) {
             ?>
             <form method="post" style="display: inline-block;margin-left:5%;text-align: left;">
                 <p><b>Flex Check-In Question :</b></p>
