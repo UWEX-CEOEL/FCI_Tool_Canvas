@@ -77,7 +77,7 @@ if ( isset($_POST['gift']) ) {
 	
 	// Get link information to update link history table
 	$sql = "SELECT link_sha256, link_key, created_at, updated_at FROM {$p}lti_link WHERE link_id = :link_id";
-	$currentLink = $PDOX->rowDie($sql, array(
+	$currentLink (array) = $PDOX->rowDie($sql, array(
 		':link_id'=>$_SESSION['lti']
 	));
 
@@ -95,8 +95,8 @@ if ( isset($_POST['gift']) ) {
 
     $_SESSION['success'] = 'Flex Check-In updated';
     unset($_SESSION['gift']);
-//     header( 'Location: '.addSession('index.php') ) ;
-//     return;
+    header( 'Location: '.addSession('index.php') ) ;
+    return;
 }
 
 // Load up the quiz
