@@ -2,7 +2,7 @@
 
 namespace Tsugi\Grades;
 
-
+use \Tsugi\Grades\UI;
 use \Tsugi\UI\Table;
 use \Tsugi\Core\LTIX;
 
