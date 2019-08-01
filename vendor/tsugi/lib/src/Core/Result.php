@@ -113,6 +113,11 @@ class Result extends Entity {
                     retrieved_at = NOW() WHERE result_id = :RID",
                 array( ':server_grade' => $grade, ":RID" => $result_id)
             );
+            
+            $sql = "INSERT INTO {$CFG->dbprefix}fci_result_history (result_id, saved_timestamp) VALUES (:result_id, NOW())";
+            $PDOX->queryDie($sql, array(
+                    ':result_id'=>$result_id
+                ));
         }
         return $grade;
     }
