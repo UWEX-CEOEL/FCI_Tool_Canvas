@@ -400,9 +400,10 @@ class Table {
 
         $newsql = Table::pagedQuery($sql, $query_parms, $searchfields, $orderfields, $params);
 
+        $newsql = "SELECT R.user_id AS user_id, displayname, email, grade, note, R.updated_at AS last_updated FROM lti_result AS R JOIN lti_user AS U ON R.user_id = U.user_id WHERE R.link_id = :LID AND grade =.5 ORDER BY R.updated_at, displayname, email DESC LIMIT 200";
         //echo("<pre>\n$newsql\n</pre>\n");
         
-        echo $newsql;
+//         echo $newsql;
 
         $rows = $PDOX->allRowsDie($newsql, $query_parms);
 
