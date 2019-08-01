@@ -84,7 +84,7 @@ class Table {
         if ( $params == false ) $params = $_GET;
         if ( $orderfields == false ) $orderfields = $searchfields;
 
-//         $searchtext = '';
+        $searchtext = '';
 //         if ( count($searchfields) > 0 && isset($params['search_text']) ) {
 //             for($i=0; $i < count($searchfields); $i++ ) {
 //                 if ( $i > 0 ) $searchtext .= " OR ";
