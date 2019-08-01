@@ -14,8 +14,8 @@ class UI {
     public static function gradeTable($GRADE_DETAIL_CLASS) {
         global $CFG, $OUTPUT, $USER, $LINK;
         // Require CONTEXT, USER, and LINK
-        $userRole = $USER->determineUserRole($USER->id);
-        if ( ! $userRole ) die("Requires modifying role permission");
+       // $userRole = $USER->determineUserRole($USER->id);
+      //  if ( ! $userRole ) die("Requires modifying role permission");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
