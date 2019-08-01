@@ -88,7 +88,7 @@ if ( isset($_POST['gift']) ) {
 		':link_id'=>$_SESSION['lti']['link_id'],
 		':link_sha256'=>$currentLink['link_sha256'],
 		':link_key'=>$currentLink['link_key'],
-		':json'=>$currentLink[3],
+		':json'=>$gift,
 		':created_at'=>$currentLink['created_at'],
 		':instructor_id'=>$USER->id,
 		':saved_timestamp'=>$currentLink['updated_at']
