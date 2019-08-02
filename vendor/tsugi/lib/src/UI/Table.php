@@ -23,7 +23,7 @@ use \Tsugi\Core\LTIX;
  */
 class Table {
 
-    public static $DEFAULT_PAGE_LENGTH = 20;  // Setting this to 2 is good for debugging
+    public static $DEFAULT_PAGE_LENGTH = 200;  // Setting this to 2 is good for debugging
 
     public static function doForm($values, $override=Array()) {
         foreach (array_merge($values,$override) as $key => $value) {
@@ -85,13 +85,13 @@ class Table {
         if ( $orderfields == false ) $orderfields = $searchfields;
 
         $searchtext = '';
-//         if ( count($searchfields) > 0 && isset($params['search_text']) ) {
-//             for($i=0; $i < count($searchfields); $i++ ) {
-//                 if ( $i > 0 ) $searchtext .= " OR ";
-//                 $searchtext .= $searchfields[$i]." LIKE :SEARCH".$i;
-//                 $queryvalues[':SEARCH'.$i] = '%'.$params['search_text'].'%';
-//             }
-//         }
+        if ( count($searchfields) > 0 && isset($params['search_text']) ) {
+            for($i=0; $i < count($searchfields); $i++ ) {
+                if ( $i > 0 ) $searchtext .= " OR ";
+                $searchtext .= $searchfields[$i]." LIKE :SEARCH".$i;
+                $queryvalues[':SEARCH'.$i] = '%'.$params['search_text'].'%';
+            }
+        }
 
         $ordertext = '';
         // if ( $params && isset($params['order_by']) && Table::matchColumns($params['order_by'], $orderfields) ) {
@@ -100,14 +100,17 @@ class Table {
             $orderList = '';
             
             foreach ($orderfields as $orderItem) {
-                $orderList .= $orderItem . ", ";
+                $orderList .= $orderItem;
+                
+                if ( isset($params['desc']) && $params['desc'] == 1) {
+                    $orderList .= " DESC";
+                }
+                
+                $orderList .= ", ";
             }
-            rtrim($orderList,',');
             
-            $ordertext = $orderList;
-            if ( isset($params['desc']) && $params['desc'] == 1) {
-                $ordertext .= "DESC ";
-            }
+            $ordertext = substr_replace($orderList, "", -2);
+
         } else if ( count($orderfields) > 0 ) {
             $ordertext = $orderfields[0]." ";
         }
@@ -122,12 +125,11 @@ class Table {
             $desc = $params['desc']+0;
         }
 
-        $limittext = '200';
-//         if ( $page_start < 1 ) {
-//             $limittext = "".($page_length+1);
-//         } else {
-//             $limittext = "".$page_start.", ".($page_length+1);
-//         }
+        if ( $page_start < 1 ) {
+            $limittext = "".($page_length+1);
+        } else {
+            $limittext = "".$page_start.", ".($page_length+1);
+        }
 
         // Remove any GROUP BY
         $gpos = strpos($sql,"GROUP BY");
@@ -159,6 +161,7 @@ class Table {
         if ( strlen($limittext) > 0 ) {
             $newsql .= "\nLIMIT ".$limittext." ";
         }
+        
         return $newsql . "\n";
     }
 
@@ -398,12 +401,9 @@ class Table {
 
         if ( $params == false ) $params = $_GET;
 
-        $newsql = Table::pagedQuery($sql, $query_parms);
+        $newsql = Table::pagedQuery($sql, $query_parms, $searchfields, $orderfields, $params);
 
-//         $newsql = "SELECT R.user_id AS user_id, displayname, email, grade, note, R.updated_at AS last_updated FROM lti_result AS R JOIN lti_user AS U ON R.user_id = U.user_id WHERE R.link_id = :LID AND grade =.5 ORDER BY R.updated_at, displayname, email DESC LIMIT 200";
         //echo("<pre>\n$newsql\n</pre>\n");
-        
-//         echo $newsql;
 
         $rows = $PDOX->allRowsDie($newsql, $query_parms);
 
