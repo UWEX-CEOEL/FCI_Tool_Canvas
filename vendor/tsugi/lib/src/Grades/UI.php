@@ -19,8 +19,8 @@ class UI {
         $p = $CFG->dbprefix;
 
         // Get basic grade data
-       // $query_parms = array(":LID" => $LINK->id);
-          $query_parms = array(":LID" => 44);
+       $query_parms = array(":LID" => $LINK->id);
+//           $query_parms = array(":LID" => 44);
         $orderfields =  array("R.updated_at", "displayname", "email");
         $searchfields = array();
         /*
