@@ -405,9 +405,9 @@ class Table {
 
         //echo("<pre>\n$newsql\n</pre>\n");
         
-        echo $newsql;
-        echo "<br />";
-        print_r($query_parms);
+//         echo $newsql;
+//         echo "<br />";
+//         print_r($query_parms);
 
         $rows = $PDOX->allRowsDie($newsql, $query_parms);
 
