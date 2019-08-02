@@ -15,7 +15,7 @@ class UI {
         global $CFG, $OUTPUT, $USER, $LINK;
         // Require CONTEXT, USER, and LINK
         $LAUNCH = LTIX::requireData();
-        if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
+//         if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
