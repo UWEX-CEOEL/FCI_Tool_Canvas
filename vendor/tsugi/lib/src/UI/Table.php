@@ -85,13 +85,13 @@ class Table {
         if ( $orderfields == false ) $orderfields = $searchfields;
 
         $searchtext = '';
-        if ( count($searchfields) > 0 && isset($params['search_text']) ) {
-            for($i=0; $i < count($searchfields); $i++ ) {
-                if ( $i > 0 ) $searchtext .= " OR ";
-                $searchtext .= $searchfields[$i]." LIKE :SEARCH".$i;
-                $queryvalues[':SEARCH'.$i] = '%'.$params['search_text'].'%';
-            }
-        }
+//         if ( count($searchfields) > 0 && isset($params['search_text']) ) {
+//             for($i=0; $i < count($searchfields); $i++ ) {
+//                 if ( $i > 0 ) $searchtext .= " OR ";
+//                 $searchtext .= $searchfields[$i]." LIKE :SEARCH".$i;
+//                 $queryvalues[':SEARCH'.$i] = '%'.$params['search_text'].'%';
+//             }
+//         }
 
         $ordertext = '';
         // if ( $params && isset($params['order_by']) && Table::matchColumns($params['order_by'], $orderfields) ) {
