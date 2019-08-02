@@ -2,7 +2,7 @@
 
 namespace Tsugi\Grades;
 
-use \Tsugi\Grades\UI;
+
 use \Tsugi\UI\Table;
 use \Tsugi\Core\LTIX;
 
@@ -14,13 +14,12 @@ class UI {
     public static function gradeTable($GRADE_DETAIL_CLASS) {
         global $CFG, $OUTPUT, $USER, $LINK;
         // Require CONTEXT, USER, and LINK
-       // $userRole = $USER->determineUserRole($USER->id);
-      //  if ( ! $userRole ) die("Requires modifying role permission");
+        $LAUNCH = LTIX::requireData();
+        if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
-       $query_parms = array(":LID" => $LINK->id);
-//           $query_parms = array(":LID" => 44);
+        $query_parms = array(":LID" => $LINK->id);
         $orderfields =  array("R.updated_at", "displayname", "email");
         $searchfields = array();
         /*
@@ -63,8 +62,7 @@ class UI {
                                         FROM {$p}lti_result AS R
                                         JOIN {$p}lti_user AS U ON R.user_id = U.user_id
                                         WHERE R.link_id = :LID AND
-                                        (grade IN ('',0) OR grade IS NULL)
-                                        AND
+                                        (grade IN ('',0) OR grade IS NULL) AND
                                         substring(R.sis_enrollment_id, -4, 4) IN (SELECT term_id
                                                                   FROM {$p}fci_term
                                                                   WHERE sysdate() BETWEEN term_start_dt AND term_end_dt)
