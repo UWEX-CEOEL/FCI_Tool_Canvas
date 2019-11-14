@@ -43,6 +43,7 @@ $userRole = $USER->determineUserRole($USER->id);
 // If this isn't an instructor, check if they're a repeat student and, if so, wipe previous attempt
 if (!$userRole) {
     $RESULT->wipeRepeats($resultId, $currentTerm, $USER->id);
+    $RESULT->grade = 0;
 }
 
 
