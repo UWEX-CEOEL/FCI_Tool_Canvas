@@ -15,7 +15,7 @@ class UI {
         global $CFG, $OUTPUT, $USER, $LINK;
         // Require CONTEXT, USER, and LINK
         $LAUNCH = LTIX::requireData();
-        if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
+//         if ( ! $USER->instructor && ! $USER->ASC ) die("Requires instructor or ASC role");
         $p = $CFG->dbprefix;
 
         // Get basic grade data
@@ -62,8 +62,7 @@ class UI {
                                         FROM {$p}lti_result AS R
                                         JOIN {$p}lti_user AS U ON R.user_id = U.user_id
                                         WHERE R.link_id = :LID AND
-                                        (grade IN ('',0) OR grade IS NULL)
-                                        AND
+                                        (grade IN ('',0) OR grade IS NULL) AND
                                         substring(R.sis_enrollment_id, -4, 4) IN (SELECT term_id
                                                                   FROM {$p}fci_term
                                                                   WHERE sysdate() BETWEEN term_start_dt AND term_end_dt)

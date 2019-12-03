@@ -448,6 +448,7 @@ class LTIX {
         }
 
         // Update the login_at data
+        // In addition to standard fields, we are also tracking lms_defined_id, lms_username, lms_rolename, and canvas_sis_user
         $start_time = self::wrapped_session_get($session_object, 'tsugi_permanent_start_time', false);
         if ( isset($row['user_id']) && $start_time !== false) {
             if ( Net::getIP() !== NULL ) {
@@ -462,6 +463,7 @@ class LTIX {
                     )
                 );
             } else {
+                // In addition to standard fields, we are also tracking lms_defined_id, lms_username, lms_rolename, and canvas_sis_user
                 $sql = "UPDATE {$CFG->dbprefix}lti_user SET login_at=NOW(), lms_defined_id=:LMSID,lms_username=:LMSUSER,lms_rolename = :LMSROLE, canvas_sis_user = :SISUSER WHERE user_id = :user_id";
                 $stmt = $PDOX->queryReturnError($sql, array(
                     ':user_id' => $row['user_id'],
@@ -813,7 +815,7 @@ class LTIX {
             $actions[] = "=== Inserted link id=".$row['link_id']." ".$row['link_title'];
         }
 
-
+        // In addition to standard fields, we are also tracking lms_defined_id, lms_username, lms_rolename, and canvas_sis_user
         $user_displayname = isset($post['user_displayname']) ? $post['user_displayname'] : null;
         $user_email = isset($post['user_email']) ? $post['user_email'] : null;
         $lms_defined_id = isset($request_data['ext_d2l_orgdefinedid']) ? $request_data['ext_d2l_orgdefinedid'] : null;
@@ -885,6 +887,7 @@ class LTIX {
 
         // We always insert a result row if we have a link - we will store
         // grades locally in this row - even if we cannot send grades
+        // In addition to tracking standard fields, we are also tracking the fci type and the current section term
         if ( $row['result_id'] === null && $row['link_id'] !== null && $row['user_id'] !== null ) {
             $sql = "INSERT INTO {$p}lti_result
                 ( link_id, user_id, created_at, updated_at, current_section_term, fci_type ) VALUES
@@ -893,7 +896,7 @@ class LTIX {
                 ':link_id' => $row['link_id'],
                 ':user_id' => $row['user_id'],
                 ':currentSectionTerm' => $_POST['custom_dxjcanvas_section'],
-                ':fciType' => $_POST['custom_fcitype']));
+                ':fciType' => $_POST['custom_fci_type']));
             $row['result_id'] = $PDOX->lastInsertId();
             $actions[] = "=== Inserted result id=".$row['result_id'];
        }
@@ -951,10 +954,10 @@ class LTIX {
         // Update with FCI Type
         // IF statement?
 
-        if (isset($request_data['custom_fcitype']) && isset($row['link_id']) && $_POST['custom_fcitype'] != $row['fci_type']) {
+        if (isset($request_data['custom_fci_type']) && isset($row['link_id']) && $_POST['custom_fci_type'] != $row['fci_type']) {
             $sql="UPDATE {$p}lti_link SET fci_type = :fci_type WHERE link_id = :link_id";
             $PDOX->queryDie($sql, array(
-                ':fci_type' => $_POST['custom_fcitype'],
+                ':fci_type' => $_POST['custom_fci_type'],
                 ':link_id' => $row['link_id']
             ));
 

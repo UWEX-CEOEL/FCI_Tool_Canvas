@@ -22,7 +22,7 @@ function percent($x) {
 
 $LAUNCH = LTIX::requireData();
 $p = $CFG->dbprefix;
-$fciType = LTIX::ltiCustomGet('fcitype');
+$fciType = LTIX::ltiCustomGet('fci_type');
 $resultId = $_SESSION['lti']['result_id'];
 $currentTerm = $_SESSION['lti_post']['custom_dxjcanvas_section'];
 $fciState;
@@ -35,10 +35,15 @@ $fciState;
 //   $USER->setInstructor(1);
 // }
 
+// Determine whether or not the user is an instructor
+// instructor = true
+// not an instructor = false
 $userRole = $USER->determineUserRole($USER->id);
 
+// If this isn't an instructor, check if they're a repeat student and, if so, wipe previous attempt
 if (!$userRole) {
     $RESULT->wipeRepeats($resultId, $currentTerm, $USER->id);
+    $RESULT->grade = 0;
 }
 
 
