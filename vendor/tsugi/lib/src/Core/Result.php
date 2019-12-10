@@ -335,6 +335,10 @@ class Result extends Entity {
 
             $PDOX->queryDie("UPDATE {$CFG->dbprefix}lti_result SET grade = null, json = null, current_section_term = :newSectionTerm, fci_state = 1 WHERE result_id = :resultId AND user_id = :userId",
             array(':newSectionTerm' => $currentTerm, ':resultId' => $resultId, ':userId' => $currentUser));
+              
+              return true;
+          } else {
+              return false;
           }
         }
       }
