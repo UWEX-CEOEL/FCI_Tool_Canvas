@@ -5,7 +5,7 @@
         "silex/silex": "v2.0.4",
         "symfony/translation": "v3.2.7",
         "symfony/debug": "v3.2.8",
-        "symfony/http-foundation": "v3.2.8",
+        "symfony/http-foundation": "v3.4.35",
         "symfony/event-dispatcher": "v3.2.8",
         "symfony/http-kernel": "v3.2.8",
         "symfony/routing": "v3.2.8",
