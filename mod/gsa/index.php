@@ -340,6 +340,7 @@ foreach ($result as $fciLine) {
 }
 
 // Only do this for students
+$fciState = 0;
 switch ($fciState) {
     case 0:
         // In this case, we do nothing
