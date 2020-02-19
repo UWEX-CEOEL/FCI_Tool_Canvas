@@ -35,6 +35,8 @@ if ($fciState == 5) {
 	</p>
 
 	<p style="clear:both;font-weight: bold;">Please Insert or Update Your Answer Below :</p>
+	<p style="clear:both;font-weight: bold;">You must click the submit button at bottom of page to save your work and complete the FCI requirement.</p>
+
 
 <?php
 if (isset($readonly)) {
